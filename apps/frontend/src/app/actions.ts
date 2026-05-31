@@ -259,7 +259,7 @@ export async function crearPedidoAction(
       .eq('id', item.promoId)
       .single();
     
-    const subtotal = Number(promo.precio_bs) * item.cantidad;
+    const subtotal = Number(promo?.precio_bs || 0) * item.cantidad;
     subtotalBs += subtotal;
     itemsConSubtotal.push({
       promo_id: item.promoId,
@@ -302,7 +302,7 @@ export async function crearPedidoAction(
     .single();
 
   if (pedidoErr || !pedido) {
-    return { error: `Error al registrar el pedido principal: ${pedidoErr.message}` };
+    return { error: `Error al registrar el pedido principal: ${pedidoErr?.message || 'No se pudo crear el registro.'}` };
   }
 
   // Insertar ítems
@@ -335,7 +335,7 @@ export async function crearPedidoAction(
         .eq('id', item.promoId)
         .single();
       
-      const newStock = Math.max(0, currentPromo.stock_disponible - item.cantidad);
+      const newStock = Math.max(0, (currentPromo?.stock_disponible || 0) - item.cantidad);
       await supabase
         .from('promociones_sanjuan')
         .update({ stock_disponible: newStock })

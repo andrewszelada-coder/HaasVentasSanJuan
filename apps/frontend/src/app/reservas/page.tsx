@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getPromociones, logoutAction } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Flame, LogOut, ShoppingBag, Plus, Minus, Check, ArrowRight, ClipboardList } from 'lucide-react';
+import { Flame, LogOut, ShoppingBag, Plus, Minus, Lock, Trash2, ArrowRight, FlameKindling } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Promotion {
@@ -30,6 +30,7 @@ export default function ReservasPage() {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isPending, startTransition] = useTransition();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -69,6 +70,10 @@ export default function ReservasPage() {
         setCart(JSON.parse(savedCart));
       } catch {}
     }
+
+    // Verificar si hay una sesión activa de Supabase localmente para decidir si mostramos Salir
+    const hasSession = document.cookie.includes('sb-') || localStorage.getItem('haas_session_active') === 'true';
+    setIsAuthenticated(hasSession);
   }, []);
 
   // Guardar carrito en localStorage cuando cambie
@@ -77,24 +82,37 @@ export default function ReservasPage() {
     localStorage.setItem('haas_cart', JSON.stringify(newCart));
   };
 
-  const handleIncrement = (id: string) => {
-    setQuantities(prev => ({
-      ...prev,
-      [id]: Math.min(999, (prev[id] || 0) + 1)
-    }));
+  const handleIncrement = (id: string, stock: number) => {
+    setQuantities(prev => {
+      const current = prev[id] || 1;
+      if (current >= stock) {
+        toast.warning("Stock máximo alcanzado");
+        return { ...prev, [id]: stock };
+      }
+      return { ...prev, [id]: current + 1 };
+    });
   };
 
   const handleDecrement = (id: string) => {
-    setQuantities(prev => ({
-      ...prev,
-      [id]: Math.max(1, (prev[id] || 0) - 1)
-    }));
+    setQuantities(prev => {
+      const current = prev[id] || 1;
+      return { ...prev, [id]: Math.max(1, current - 1) };
+    });
   };
 
-  const handleQuantityChange = (id: string, value: number) => {
+  const handleQuantityChange = (id: string, valueStr: string, stock: number) => {
+    const cleanStr = valueStr.replace(/[^0-9]/g, '');
+    let val = parseInt(cleanStr, 10);
+    if (isNaN(val) || val < 1) {
+      val = 1;
+    }
+    if (val > stock) {
+      val = stock;
+      toast.warning("Stock máximo alcanzado");
+    }
     setQuantities(prev => ({
       ...prev,
-      [id]: Math.max(1, value)
+      [id]: val
     }));
   };
 
@@ -131,8 +149,26 @@ export default function ReservasPage() {
     toast.info("Combo eliminado de la reserva.");
   };
 
+  const handleUpdateCartQty = (id: string, newQty: number, stock: number) => {
+    let qty = newQty;
+    if (qty < 1) qty = 1;
+    if (qty > stock) {
+      qty = stock;
+      toast.warning("Stock máximo alcanzado");
+    }
+    
+    const newCart = cart.map(item => {
+      if (item.promotion.id === id) {
+        return { ...item, cantidad: qty };
+      }
+      return item;
+    });
+    saveCartToStorage(newCart);
+  };
+
   const handleLogout = () => {
     startTransition(async () => {
+      localStorage.removeItem('haas_session_active');
       await logoutAction();
     });
   };
@@ -140,24 +176,35 @@ export default function ReservasPage() {
   const totalBs = cart.reduce((sum, item) => sum + item.promotion.precio_bs * item.cantidad, 0);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="min-h-screen bg-[#0a0a0a] text-white pb-24 font-sans selection:bg-[#cc0000] selection:text-white">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-30">
+      <header className="bg-[#0a0a0a]/80 backdrop-blur-md border-b border-[#333333] sticky top-0 z-30 transition-all">
         <div className="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Flame className="w-5 h-5 text-[#9A3412]" />
-            <span className="font-bold text-[#0F172A] tracking-tight">HAAS B2B PORTAL</span>
+          <div className="flex items-center gap-2.5">
+            <Flame className="w-5 h-5 text-[#cc0000] animate-pulse" />
+            <span className="font-extrabold text-sm tracking-widest text-white uppercase">HAAS PORTAL RESERVAS</span>
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={handleLogout}
-              disabled={isPending}
-              className="text-xs text-slate-500 hover:text-red-700 flex items-center gap-1.5 transition-colors uppercase font-semibold tracking-wider font-mono bg-slate-50 hover:bg-red-50 px-3 py-2 rounded-lg"
+            <Link 
+              href="/login" 
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-all py-1.5 px-3 bg-[#121212] hover:bg-[#1c1c1c] border border-[#333333] rounded-lg group shadow-inner"
+              title="Acceso exclusivo para administradores"
             >
-              <LogOut className="w-4 h-4" />
-              Salir
-            </button>
+              <Lock className="w-3.5 h-3.5 text-gray-600 group-hover:text-[#cc0000] transition-colors" />
+              <span className="font-mono font-semibold tracking-wide">Portal Admin</span>
+            </Link>
+
+            {isAuthenticated && (
+              <button
+                onClick={handleLogout}
+                disabled={isPending}
+                className="text-xs text-gray-400 hover:text-white flex items-center gap-1.5 transition-colors uppercase font-mono bg-[#121212] border border-[#333333] px-3 py-1.5 rounded-lg"
+              >
+                <LogOut className="w-3.5 h-3.5 text-[#cc0000]" />
+                <span>Salir</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -167,26 +214,29 @@ export default function ReservasPage() {
         
         {/* Left Side: Catalog */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center pb-4 border-b border-[#333333]">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Catálogo de San Juan</h1>
-              <p className="text-slate-500 text-xs mt-1">Precios corporativos exclusivos. Suministro garantizado para planta.</p>
+              <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+                <FlameKindling className="w-6 h-6 text-[#cc0000] shrink-0" />
+                Catálogo de San Juan 2026
+              </h1>
+              <p className="text-gray-400 text-xs mt-1">Precios corporativos garantizados de fábrica para sucursales B2B e invitados.</p>
             </div>
           </div>
 
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[1, 2, 3, 4].map(n => (
-                <div key={n} className="bg-white border border-slate-100 rounded-2xl p-6 space-y-4 animate-pulse">
-                  <div className="bg-slate-100 rounded-xl h-48 w-full" />
-                  <div className="h-4 bg-slate-100 rounded w-1/3" />
-                  <div className="h-6 bg-slate-100 rounded w-3/4" />
-                  <div className="h-4 bg-slate-100 rounded w-full" />
+                <div key={n} className="bg-[#121212] border border-[#333333] rounded-2xl p-6 space-y-4 animate-pulse">
+                  <div className="bg-[#1a1a1a] rounded-xl h-48 w-full" />
+                  <div className="h-4 bg-[#1a1a1a] rounded w-1/3" />
+                  <div className="h-6 bg-[#1a1a1a] rounded w-3/4" />
+                  <div className="h-4 bg-[#1a1a1a] rounded w-full" />
                 </div>
               ))}
             </div>
           ) : promociones.length === 0 ? (
-            <Card className="border border-slate-100 p-12 text-center text-slate-400 bg-white">
+            <Card className="border border-[#333333] p-12 text-center text-gray-500 bg-[#121212]">
               No hay promociones activas registradas para la campaña.
             </Card>
           ) : (
@@ -197,49 +247,60 @@ export default function ReservasPage() {
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   whileHover={{ y: -4 }}
-                  className="bg-white border border-slate-100 rounded-2xl overflow-hidden p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all duration-200"
+                  className="bg-[#121212] border border-[#333333] hover:border-[#cc0000]/50 rounded-2xl overflow-hidden p-5 flex flex-col justify-between hover:shadow-[0_0_20px_rgba(204,0,0,0.15)] transition-all duration-300"
                 >
                   <div>
-                    <div className="relative overflow-hidden rounded-xl mb-4 aspect-[4/3] bg-slate-100 border border-slate-50">
+                    <div className="relative overflow-hidden rounded-xl mb-4 aspect-[4/3] bg-[#1a1a1a] border border-[#262626]">
                       <img
                         src={promo.imagen_url}
                         alt={promo.titulo}
-                        className="object-cover w-full h-full"
+                        className="object-cover w-full h-full hover:scale-105 transition-transform duration-500"
                       />
                     </div>
-                    <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-widest bg-emerald-50 px-2 py-0.5 rounded-full">
+                    <span className="text-[9px] text-[#ff3333] font-bold uppercase tracking-widest bg-[#cc0000]/10 border border-[#cc0000]/25 px-2.5 py-1 rounded-full">
                       Campaña San Juan
                     </span>
-                    <h3 className="text-lg font-bold text-slate-900 mt-2 mb-1 leading-tight">{promo.titulo}</h3>
-                    <p className="text-slate-500 text-xs leading-relaxed mb-4 line-clamp-2">{promo.descripcion}</p>
+                    <h3 className="text-lg font-bold text-white mt-3 mb-1.5 leading-tight">{promo.titulo}</h3>
+                    <p className="text-gray-400 text-xs leading-relaxed mb-4 line-clamp-2">{promo.descripcion}</p>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex justify-between items-baseline">
-                      <span className="text-xs text-slate-400 font-mono">Precio Unitario:</span>
-                      <span className="text-xl font-bold font-mono text-[#9A3412]">Bs. {promo.precio_bs.toFixed(2)}</span>
+                      <span className="text-xs text-gray-500 font-mono">Precio Unitario:</span>
+                      <span className="text-xl font-black font-mono text-[#cc0000] drop-shadow-[0_0_10px_rgba(204,0,0,0.25)]">Bs. {promo.precio_bs.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex justify-between text-[11px] font-mono text-gray-500 pb-1.5 border-b border-[#262626]">
+                      <span>Stock disponible:</span>
+                      <span className="font-bold text-white">{promo.stock_disponible} unidades</span>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      {/* Quantity Selector */}
-                      <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
+                      {/* Quantity Selector with strict QA block */}
+                      <div className="flex items-center border border-[#333333] rounded-lg overflow-hidden bg-[#1a1a1a]">
                         <button
                           type="button"
                           onClick={() => handleDecrement(promo.id)}
-                          className="px-2 py-1.5 hover:bg-slate-100 text-slate-500 transition-colors"
+                          className="px-2.5 py-2 hover:bg-[#262626] text-gray-400 transition-colors"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
                         <input
-                          type="number"
+                          type="text"
                           value={quantities[promo.id] || 1}
-                          onChange={(e) => handleQuantityChange(promo.id, parseInt(e.target.value) || 1)}
-                          className="w-12 text-center text-sm font-semibold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none"
+                          onKeyDown={(e) => {
+                            // Bloquear letras, decimales, negativos, etc.
+                            if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
+                              e.preventDefault();
+                            }
+                          }}
+                          onChange={(e) => handleQuantityChange(promo.id, e.target.value, promo.stock_disponible)}
+                          className="w-12 text-center text-sm font-bold text-white border-none bg-transparent focus:ring-0 focus:outline-none"
                         />
                         <button
                           type="button"
-                          onClick={() => handleIncrement(promo.id)}
-                          className="px-2 py-1.5 hover:bg-slate-100 text-slate-500 transition-colors"
+                          onClick={() => handleIncrement(promo.id, promo.stock_disponible)}
+                          className="px-2.5 py-2 hover:bg-[#262626] text-gray-400 transition-colors"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
@@ -248,7 +309,7 @@ export default function ReservasPage() {
                       {/* Add Button */}
                       <Button
                         onClick={() => handleAddToCart(promo)}
-                        className="flex-1 bg-[#166534] hover:bg-[#114f27] text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-[#cc0000] hover:bg-[#e60000] text-white text-xs font-bold uppercase tracking-wider py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-[#cc0000]/10"
                       >
                         Añadir a Reserva
                       </Button>
@@ -262,41 +323,77 @@ export default function ReservasPage() {
 
         {/* Right Side: Floating / Sticky Cart Summary */}
         <div className="lg:col-span-4">
-          <Card className="border border-slate-100 shadow-lg shadow-slate-100/50 bg-white rounded-2xl sticky top-24">
+          <Card className="border border-[#333333] shadow-2xl bg-[#121212] rounded-2xl sticky top-24 overflow-hidden">
+            <div className="h-[2px] bg-gradient-to-r from-transparent via-[#cc0000] to-transparent" />
             <CardContent className="p-6 space-y-6">
-              <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <div className="flex justify-between items-center pb-4 border-b border-[#262626]">
                 <div className="flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5 text-emerald-800" />
-                  <span className="font-bold text-slate-900">Resumen de Reserva</span>
+                  <ShoppingBag className="w-5 h-5 text-[#cc0000]" />
+                  <span className="font-bold text-white uppercase tracking-wider text-sm">Resumen de Reserva</span>
                 </div>
-                <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold bg-[#cc0000]/10 border border-[#cc0000]/25 text-[#ff3333] px-2.5 py-0.5 rounded-full font-mono">
                   {cart.length} combos
                 </span>
               </div>
 
               <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
                 {cart.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 text-xs">
-                    No has añadido combos a tu reserva.
+                  <div className="text-center py-8 text-gray-500 text-xs font-mono">
+                    No has añadido combos a tu reserva todavía.
                   </div>
                 ) : (
                   cart.map(item => (
-                    <div key={item.promotion.id} className="flex justify-between items-start gap-4 pb-3 border-b border-slate-50 last:border-0 last:pb-0">
-                      <div className="space-y-1">
-                        <span className="block font-bold text-slate-800 text-xs leading-snug">{item.promotion.titulo}</span>
-                        <span className="block text-[10px] text-slate-400 font-mono">
-                          Bs. {item.promotion.precio_bs.toFixed(2)} × {item.cantidad}
-                        </span>
+                    <div key={item.promotion.id} className="flex flex-col gap-2 pb-4 border-b border-[#262626] last:border-0 last:pb-0">
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="space-y-0.5">
+                          <span className="block font-bold text-white text-xs leading-snug">{item.promotion.titulo}</span>
+                          <span className="block text-[10px] text-gray-500 font-mono">
+                            Bs. {item.promotion.precio_bs.toFixed(2)} c/u
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-bold font-mono text-xs text-[#cc0000]">
+                            Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}
+                          </span>
+                          <button
+                            onClick={() => handleRemoveFromCart(item.promotion.id)}
+                            className="text-gray-500 hover:text-red-500 text-xs font-bold transition-colors"
+                            title="Eliminar combo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold font-mono text-xs text-[#9A3412]">
-                          Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}
-                        </span>
+
+                      {/* QA Editable Quantity Input inside sidebar cart */}
+                      <div className="flex items-center border border-[#262626] rounded bg-[#1a1a1a] w-fit">
                         <button
-                          onClick={() => handleRemoveFromCart(item.promotion.id)}
-                          className="text-slate-300 hover:text-red-600 text-xs font-mono font-bold"
+                          type="button"
+                          onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad - 1, item.promotion.stock_disponible)}
+                          className="px-2 py-1 hover:bg-[#262626] text-gray-400 transition-colors"
                         >
-                          ×
+                          <Minus className="w-2.5 h-2.5" />
+                        </button>
+                        <input
+                          type="text"
+                          value={item.cantidad}
+                          onKeyDown={(e) => {
+                            if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
+                              e.preventDefault();
+                            }
+                          }}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 1;
+                            handleUpdateCartQty(item.promotion.id, val, item.promotion.stock_disponible);
+                          }}
+                          className="w-8 text-center text-[10px] font-bold text-white border-none bg-transparent focus:ring-0 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad + 1, item.promotion.stock_disponible)}
+                          className="px-2 py-1 hover:bg-[#262626] text-gray-400 transition-colors"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     </div>
@@ -305,14 +402,14 @@ export default function ReservasPage() {
               </div>
 
               {cart.length > 0 && (
-                <div className="pt-4 border-t border-slate-100 space-y-4">
+                <div className="pt-4 border-t border-[#262626] space-y-4">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Monto Total:</span>
-                    <span className="text-2xl font-bold font-mono text-[#9A3412]">Bs. {totalBs.toFixed(2)}</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Monto Total:</span>
+                    <span className="text-2xl font-black font-mono text-[#cc0000] drop-shadow-[0_0_10px_rgba(204,0,0,0.2)]">Bs. {totalBs.toFixed(2)}</span>
                   </div>
 
                   <Link href="/checkout" className="block w-full">
-                    <Button className="w-full bg-[#9A3412] hover:bg-[#7c2a0e] text-white py-2.5 rounded-lg flex items-center justify-center gap-2 font-medium">
+                    <Button className="w-full bg-[#cc0000] hover:bg-[#e60000] text-white py-3 rounded-lg flex items-center justify-center gap-2 font-bold uppercase tracking-wider text-xs shadow-lg shadow-[#cc0000]/10 transition-all hover:scale-[1.01]">
                       Continuar a Checkout <ArrowRight className="w-4 h-4" />
                     </Button>
                   </Link>

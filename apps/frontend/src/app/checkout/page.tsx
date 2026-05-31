@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { crearPedidoAction, loginAction } from '@/app/actions';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, ArrowRight, Check, User, MapPin, CreditCard, 
-  Receipt, Landmark, BadgePercent, Map, ShieldAlert, Loader2 
+  Receipt, Landmark, BadgePercent, Map, ShieldAlert, Loader2, Lock
 } from 'lucide-react';
 
 interface CartItem {
@@ -53,6 +53,7 @@ export default function CheckoutStepperPage() {
   const [telefono, setTelefono] = useState('');
   const [indicaciones, setIndicaciones] = useState('');
   const [mapFixed, setMapFixed] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   // Paso 4: Pago & Cupones
   const [cuponInput, setCuponInput] = useState('');
@@ -83,15 +84,35 @@ export default function CheckoutStepperPage() {
     }
   };
 
-  const handleFixLocation = () => {
-    // Simular geolocalización en coordenadas de La Paz, Bolivia
-    const simulatedLat = -16.5000 + (Math.random() - 0.5) * 0.02;
-    const simulatedLng = -68.1500 + (Math.random() - 0.5) * 0.02;
-    
-    setLatitud(simulatedLat);
-    setLongitud(simulatedLng);
-    setMapFixed(true);
-    toast.success('¡Ubicación GPS fijada en el mapa con éxito!');
+  // Geolocalización nativa real GPS
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("La geolocalización no es soportada por este navegador.");
+      return;
+    }
+
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitud(position.coords.latitude);
+        setLongitud(position.coords.longitude);
+        setMapFixed(true);
+        setGettingLocation(false);
+        toast.success("¡Ubicación GPS real capturada e integrada con éxito!");
+      },
+      (error) => {
+        setGettingLocation(false);
+        console.error("Error de geolocalización:", error);
+        // Exigencia de QA: Mostrar Toast amigable de error al denegar
+        toast.error("Debes permitir la ubicación para la entrega");
+        
+        // Cargar coordenadas de fallback en La Paz, Bolivia para no impedir la compra
+        setLatitud(-16.5001);
+        setLongitud(-68.1501);
+        setMapFixed(true);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
   };
 
   const nextStep = () => {
@@ -119,7 +140,7 @@ export default function CheckoutStepperPage() {
         return;
       }
       if (!mapFixed) {
-        toast.error('Por favor, fije su ubicación en el mapa de coordenadas.');
+        toast.error('Por favor, obtenga su ubicación GPS satelital.');
         return;
       }
     }
@@ -164,9 +185,21 @@ export default function CheckoutStepperPage() {
         metodoPago
       };
 
+      // Si el usuario eligió iniciar sesión para comprar, corremos el loginAction primero en segundo plano
+      if (!isGuest) {
+        const formData = new FormData();
+        formData.append('email', email);
+        formData.append('password', password);
+        const loginRes = await loginAction(formData);
+        if (loginRes && loginRes.error) {
+          toast.error(`Error de autenticación: ${loginRes.error}`);
+          return;
+        }
+      }
+
       const result = await crearPedidoAction(
-        'Sucursal Central', // sucursal
-        '2026-06-23', // fecha campaña
+        'Sucursal Central LPZ', // sucursal
+        '2026-06-23', // fecha campaña San Juan
         indicaciones || 'Entrega especial San Juan B2C',
         itemsPayload,
         billingPayload,
@@ -192,6 +225,7 @@ export default function CheckoutStepperPage() {
         sessionStorage.setItem('haas_success_order', JSON.stringify(orderData));
         localStorage.removeItem('haas_cart'); // Limpiar carrito local
         
+        toast.success("¡Pedido registrado exitosamente en fábrica!");
         // Redirigir a pantalla de éxito
         router.push('/checkout/success');
       }
@@ -206,15 +240,15 @@ export default function CheckoutStepperPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="min-h-screen bg-[#0a0a0a] text-white pb-24 font-sans selection:bg-[#cc0000] selection:text-white">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-30">
+      <header className="bg-[#0a0a0a]/80 backdrop-blur-md border-b border-[#333333] sticky top-0 z-30 transition-all">
         <div className="max-w-5xl mx-auto px-6 h-16 flex justify-between items-center">
-          <Link href="/reservas" className="text-slate-500 hover:text-[#166534] flex items-center gap-1.5 text-sm font-semibold transition-colors">
-            <ArrowLeft className="w-4 h-4" />
+          <Link href="/reservas" className="text-gray-400 hover:text-white flex items-center gap-1.5 text-sm font-semibold transition-colors">
+            <ArrowLeft className="w-4 h-4 text-[#cc0000]" />
             Volver al Catálogo
           </Link>
-          <span className="font-bold text-sm tracking-tight text-slate-900">HAAS SAN JUAN • CHECKOUT</span>
+          <span className="font-extrabold text-xs tracking-widest text-white uppercase font-mono">HAAS SAN JUAN • CHECKOUT</span>
         </div>
       </header>
 
@@ -230,21 +264,21 @@ export default function CheckoutStepperPage() {
             return (
               <div key={idx} className="space-y-2">
                 <div className={`h-1 rounded-full transition-all duration-300 ${
-                  isCompleted || isActive ? 'bg-[#166534]' : 'bg-slate-200'
+                  isCompleted || isActive ? 'bg-[#cc0000]' : 'bg-[#262626]'
                 }`} />
                 <div className="flex items-center gap-2">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
                     isCompleted 
-                      ? 'bg-[#166534] text-white' 
+                      ? 'bg-[#cc0000] text-white shadow-[0_0_10px_rgba(204,0,0,0.4)]' 
                       : isActive 
-                      ? 'border-2 border-[#166534] text-[#166534]' 
-                      : 'border-2 border-slate-200 text-slate-400'
+                      ? 'border-2 border-[#cc0000] text-[#cc0000] shadow-[0_0_8px_rgba(204,0,0,0.2)]' 
+                      : 'border-2 border-[#333333] text-gray-500'
                   }`}>
                     {isCompleted ? <Check className="w-3.5 h-3.5" /> : stepNum}
                   </div>
                   <div className="hidden md:block">
                     <span className={`block text-xs font-bold leading-none ${
-                      isActive ? 'text-slate-900' : 'text-slate-400'
+                      isActive ? 'text-white' : 'text-gray-500'
                     }`}>{step.title}</span>
                   </div>
                 </div>
@@ -258,7 +292,8 @@ export default function CheckoutStepperPage() {
           
           {/* Left Side: Dynamic Step Form */}
           <div className="lg:col-span-8">
-            <Card className="border border-slate-100 bg-white rounded-2xl overflow-hidden shadow-sm">
+            <Card className="border border-[#333333] bg-[#121212] rounded-2xl overflow-hidden shadow-2xl relative">
+              <div className="h-[2px] bg-gradient-to-r from-transparent via-[#cc0000] to-transparent" />
               
               <AnimatePresence mode="wait">
                 <motion.div
@@ -274,8 +309,8 @@ export default function CheckoutStepperPage() {
                   {currentStep === 1 && (
                     <div className="space-y-6">
                       <div className="space-y-1">
-                        <h2 className="text-xl font-bold text-slate-900">Paso 1: Identificación de Compra</h2>
-                        <p className="text-xs text-slate-400">Seleccione si desea comprar como socio registrado o invitado.</p>
+                        <h2 className="text-xl font-black text-white uppercase tracking-tight">Paso 1: Identificación</h2>
+                        <p className="text-xs text-gray-400">Seleccione si desea comprar como invitado libre o iniciando sesión como socio comercial.</p>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -284,8 +319,8 @@ export default function CheckoutStepperPage() {
                           onClick={() => setIsGuest(true)}
                           className={`p-4 border rounded-xl flex flex-col items-center justify-center gap-2 transition-all text-center ${
                             isGuest 
-                              ? 'border-[#166534] bg-emerald-50/10 text-[#166534] ring-1 ring-[#166534]' 
-                              : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                              ? 'border-[#cc0000] bg-[#cc0000]/5 text-[#ff3333] ring-1 ring-[#cc0000] shadow-[0_0_15px_rgba(204,0,0,0.1)]' 
+                              : 'border-[#333333] bg-[#1a1a1a] text-gray-400 hover:text-white hover:bg-[#262626]'
                           }`}
                         >
                           <span className="font-bold text-sm">Comprar como Invitado</span>
@@ -295,60 +330,60 @@ export default function CheckoutStepperPage() {
                           onClick={() => setIsGuest(false)}
                           className={`p-4 border rounded-xl flex flex-col items-center justify-center gap-2 transition-all text-center ${
                             !isGuest 
-                              ? 'border-[#166534] bg-emerald-50/10 text-[#166534] ring-1 ring-[#166534]' 
-                              : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                              ? 'border-[#cc0000] bg-[#cc0000]/5 text-[#ff3333] ring-1 ring-[#cc0000] shadow-[0_0_15px_rgba(204,0,0,0.1)]' 
+                              : 'border-[#333333] bg-[#1a1a1a] text-gray-400 hover:text-white hover:bg-[#262626]'
                           }`}
                         >
-                          <span className="font-bold text-sm">Iniciar Sesión (Socio B2B)</span>
+                          <span className="font-bold text-sm">Socio B2B Registrado</span>
                         </button>
                       </div>
 
                       {isGuest ? (
                         <div className="space-y-4 pt-2">
                           <div className="space-y-1.5">
-                            <Label htmlFor="guestName" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Nombre Completo</Label>
+                            <Label htmlFor="guestName" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Nombre Completo *</Label>
                             <Input
                               id="guestName"
                               value={guestName}
                               onChange={e => setGuestName(e.target.value)}
                               placeholder="Juan Pérez"
-                              className="border-slate-200 rounded-lg"
+                              className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000] text-white"
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="guestEmail" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Correo Electrónico</Label>
+                            <Label htmlFor="guestEmail" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Correo Electrónico *</Label>
                             <Input
                               id="guestEmail"
                               type="email"
                               value={guestEmail}
                               onChange={e => setGuestEmail(e.target.value)}
                               placeholder="juan.perez@gmail.com"
-                              className="border-slate-200 rounded-lg"
+                              className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000] text-white"
                             />
                           </div>
                         </div>
                       ) : (
                         <div className="space-y-4 pt-2">
                           <div className="space-y-1.5">
-                            <Label htmlFor="email" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Correo Corporativo</Label>
+                            <Label htmlFor="email" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Correo Corporativo *</Label>
                             <Input
                               id="email"
                               type="email"
                               value={email}
                               onChange={e => setEmail(e.target.value)}
                               placeholder="socio@haas.com.bo"
-                              className="border-slate-200 rounded-lg"
+                              className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000] text-white"
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="pass" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Contraseña</Label>
+                            <Label htmlFor="pass" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Contraseña *</Label>
                             <Input
                               id="pass"
                               type="password"
                               value={password}
                               onChange={e => setPassword(e.target.value)}
                               placeholder="••••••••"
-                              className="border-slate-200 rounded-lg"
+                              className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000] text-white"
                             />
                           </div>
                         </div>
@@ -360,47 +395,47 @@ export default function CheckoutStepperPage() {
                   {currentStep === 2 && (
                     <div className="space-y-6">
                       <div className="space-y-1">
-                        <h2 className="text-xl font-bold text-slate-900">Paso 2: Datos de Facturación</h2>
-                        <p className="text-xs text-slate-400">Complete los datos que aparecerán en la factura de la reserva.</p>
+                        <h2 className="text-xl font-black text-white uppercase tracking-tight">Paso 2: Datos de Facturación</h2>
+                        <p className="text-xs text-gray-400">Complete los datos legales que se imprimirán en la factura de compra de la reserva.</p>
                       </div>
 
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="razon" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Razón Social / Nombre Completo *</Label>
+                          <Label htmlFor="razon" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Razón Social / Nombre Completo *</Label>
                           <Input
                             id="razon"
                             value={razonSocial}
                             onChange={e => setRazonSocial(e.target.value)}
                             placeholder="Pérez Distribuidora S.R.L."
                             required
-                            className="border-slate-200 rounded-lg"
+                            className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000]"
                           />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tipo de Documento *</Label>
+                            <Label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tipo de Documento *</Label>
                             <select
                               value={tipoDocumento}
                               onChange={e => setTipoDocumento(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:ring-1 focus:ring-[#166534] focus:outline-none"
+                              className="w-full bg-[#1a1a1a] border border-[#333333] rounded-lg p-2.5 text-sm text-white focus:ring-1 focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none"
                             >
-                              <option value="NIT">NIT (Número de Identificación Tributaria)</option>
+                              <option value="NIT">NIT</option>
                               <option value="CI">C.I. (Carnet de Identidad)</option>
                               <option value="Pasaporte">Pasaporte</option>
-                              <option value="C.E.">C.E. (Carnet de Extranjero)</option>
+                              <option value="C.E.">C.E. (Extranjería)</option>
                             </select>
                           </div>
 
                           <div className="space-y-1.5">
-                            <Label htmlFor="docNum" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Número de Documento *</Label>
+                            <Label htmlFor="docNum" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Número de Documento *</Label>
                             <Input
                               id="docNum"
                               value={numeroDocumento}
                               onChange={e => setNumeroDocumento(e.target.value)}
                               placeholder="1020405060"
                               required
-                              className="border-slate-200 rounded-lg"
+                              className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000]"
                             />
                           </div>
                         </div>
@@ -412,28 +447,28 @@ export default function CheckoutStepperPage() {
                   {currentStep === 3 && (
                     <div className="space-y-6">
                       <div className="space-y-1">
-                        <h2 className="text-xl font-bold text-slate-900">Paso 3: Logística y Dirección de Despacho</h2>
-                        <p className="text-xs text-slate-400">Configure los datos de entrega física para la flota refrigerada de Haas.</p>
+                        <h2 className="text-xl font-black text-white uppercase tracking-tight">Paso 3: Logística y Entrega</h2>
+                        <p className="text-xs text-gray-400">Configure los datos de despacho físico. Nuestro equipo de andén refrigerado de frío requiere alta precisión.</p>
                       </div>
 
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tipo de Ubicación *</Label>
+                            <Label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tipo de Ubicación *</Label>
                             <select
                               value={tipoUbicacion}
                               onChange={e => setTipoUbicacion(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:ring-1 focus:ring-[#166534] focus:outline-none"
+                              className="w-full bg-[#1a1a1a] border border-[#333333] rounded-lg p-2.5 text-sm text-white focus:ring-1 focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none"
                             >
                               <option value="Casa">Casa</option>
-                              <option value="Oficina">Oficina</option>
+                              <option value="Oficina">Oficina / Andén</option>
                               <option value="Departamento">Departamento</option>
                               <option value="Condominio">Condominio</option>
                             </select>
                           </div>
 
                           <div className="space-y-1.5">
-                            <Label htmlFor="tel" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Teléfono de Contacto (WhatsApp) *</Label>
+                            <Label htmlFor="tel" className="text-xs font-bold text-gray-400 uppercase tracking-widest">WhatsApp de Contacto *</Label>
                             <Input
                               id="tel"
                               type="tel"
@@ -441,71 +476,88 @@ export default function CheckoutStepperPage() {
                               onChange={e => setTelefono(e.target.value)}
                               placeholder="70012345"
                               required
-                              className="border-slate-200 rounded-lg"
+                              className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000]"
                             />
                           </div>
                         </div>
 
                         <div className="space-y-1.5">
-                          <Label htmlFor="dir" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dirección Escrita Completa *</Label>
+                          <Label htmlFor="dir" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Dirección Escrita Detallada *</Label>
                           <Input
                             id="dir"
                             value={direccion}
                             onChange={e => setDireccion(e.target.value)}
                             placeholder="Av. Arce, Edificio Multicentro, Piso 12"
                             required
-                            className="border-slate-200 rounded-lg"
+                            className="border-[#333333] bg-[#1a1a1a] rounded-lg focus-visible:ring-[#cc0000]"
                           />
                         </div>
 
-                        {/* MAP SIMULATOR COMPONENT */}
+                        {/* GPS GEOLOCALIZACION COMPONENT */}
                         <div className="space-y-2">
-                          <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                            <Map className="w-3.5 h-3.5 text-[#166534]" /> Geolocalización Satelital (Entrega Fría)
+                          <Label className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                            <Map className="w-3.5 h-3.5 text-[#cc0000]" /> Geolocalización Satelital GPS *
                           </Label>
                           
-                          <div className="relative border border-slate-200 rounded-xl overflow-hidden h-40 bg-slate-100 flex flex-col items-center justify-center p-4">
+                          <div className="relative border border-[#333333] rounded-xl overflow-hidden h-44 bg-[#0d0d0d] flex flex-col items-center justify-center p-4">
                             {/* Grilla decorativa que simula un mapa satelital */}
-                            <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1.5px,transparent_1.5px)] [background-size:16px_16px] opacity-70" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-slate-200/50 via-transparent to-transparent" />
+                            <div className="absolute inset-0 bg-[radial-gradient(#262626_1px,transparent_1px)] [background-size:14px_14px] opacity-70" />
                             
+                            {/* Pulso de radar cuando está activado */}
+                            {mapFixed && (
+                              <div className="absolute inset-0 bg-[#cc0000]/5 flex items-center justify-center pointer-events-none">
+                                <div className="w-32 h-32 rounded-full border border-[#cc0000]/20 animate-ping absolute" />
+                                <div className="w-16 h-16 rounded-full border border-[#cc0000]/40 animate-pulse absolute" />
+                              </div>
+                            )}
+
                             <div className="relative z-10 flex flex-col items-center gap-2">
-                              <MapPin className={`w-8 h-8 transition-transform duration-300 ${
-                                mapFixed ? 'text-[#9A3412] scale-110 drop-shadow' : 'text-slate-400 animate-bounce'
+                              <MapPin className={`w-9 h-9 transition-transform duration-500 ${
+                                mapFixed ? 'text-[#cc0000] scale-110 drop-shadow-[0_0_12px_rgba(204,0,0,0.6)]' : 'text-gray-600 animate-bounce'
                               }`} />
                               {mapFixed ? (
                                 <div className="text-center space-y-0.5">
-                                  <span className="block text-[10px] font-bold text-slate-800 font-mono">
-                                    UBICACIÓN FIJADA
+                                  <span className="block text-[10px] font-black text-[#ff3333] font-mono tracking-widest uppercase">
+                                    GPS FIJADO CORRECTAMENTE
                                   </span>
-                                  <span className="block text-[9px] text-slate-500 font-mono">
-                                    Lat: {latitud?.toFixed(6)} / Lng: {longitud?.toFixed(6)}
+                                  <span className="block text-[9px] text-gray-500 font-mono">
+                                    Coordenadas: {latitud?.toFixed(6)}, {longitud?.toFixed(6)}
                                   </span>
                                 </div>
                               ) : (
-                                <span className="text-[10px] text-slate-400 font-mono">Presione el botón para geolocalizar</span>
+                                <span className="text-[10px] text-gray-500 font-mono">Requerido: Geolocalice su posición de despacho</span>
                               )}
                             </div>
                             
                             <Button
                               type="button"
-                              onClick={handleFixLocation}
-                              className="absolute bottom-3 right-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-[10px] font-bold h-7 py-1 px-3 shadow rounded-lg flex items-center gap-1 transition-colors"
+                              onClick={handleGetLocation}
+                              disabled={gettingLocation}
+                              className="absolute bottom-3 right-3 bg-[#1c1c1c] border border-[#333333] hover:bg-[#262626] hover:border-[#cc0000] text-white text-[10px] font-bold h-8 py-1 px-3 shadow rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
                             >
-                              Fijar mi ubicación actual
+                              {gettingLocation ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin text-[#cc0000]" />
+                                  Obteniendo...
+                                </>
+                              ) : (
+                                <>
+                                  📍 Obtener mi ubicación actual
+                                </>
+                              )}
                             </Button>
                           </div>
                         </div>
 
                         <div className="space-y-1.5">
-                          <Label htmlFor="ind" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Indicaciones Adicionales para el Repartidor</Label>
+                          <Label htmlFor="ind" className="text-xs font-bold text-gray-400 uppercase tracking-widest">Indicaciones Adicionales</Label>
                           <textarea
                             id="ind"
                             rows={2}
                             value={indicaciones}
                             onChange={e => setIndicaciones(e.target.value)}
-                            placeholder="Tocar el timbre verde, dejar en portería, etc."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:ring-1 focus:ring-[#166534] focus:outline-none placeholder:text-slate-400"
+                            placeholder="Tocar el timbre rojo, dejar en portería, portón metálico gris..."
+                            className="w-full bg-[#1a1a1a] border border-[#333333] rounded-lg p-2.5 text-sm text-white focus:ring-1 focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none placeholder:text-gray-600"
                           />
                         </div>
                       </div>
@@ -516,40 +568,40 @@ export default function CheckoutStepperPage() {
                   {currentStep === 4 && (
                     <div className="space-y-6">
                       <div className="space-y-1">
-                        <h2 className="text-xl font-bold text-slate-900">Paso 4: Método de Pago y Cupones</h2>
-                        <p className="text-xs text-slate-400">Configure su método de pago y aplique cupones antes de finalizar.</p>
+                        <h2 className="text-xl font-black text-white uppercase tracking-tight">Paso 4: Método de Pago</h2>
+                        <p className="text-xs text-gray-400">Configure su método de pago y aplique cupones de descuento especiales.</p>
                       </div>
 
                       {/* Coupon Box */}
                       <div className="space-y-2">
-                        <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                          <BadgePercent className="w-3.5 h-3.5 text-[#166534]" /> ¿Tiene un Cupón de Descuento?
+                        <Label className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                          <BadgePercent className="w-3.5 h-3.5 text-[#cc0000]" /> ¿Tiene un Cupón de Descuento?
                         </Label>
                         <div className="flex gap-2">
                           <Input
                             placeholder="SANJUAN10"
                             value={cuponInput}
                             onChange={e => setCuponInput(e.target.value)}
-                            className="border-slate-200 rounded-lg max-w-[200px]"
+                            className="border-[#333333] bg-[#1a1a1a] rounded-lg max-w-[200px]"
                           />
                           <Button
                             type="button"
                             onClick={applyCoupon}
-                            className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg"
+                            className="bg-[#cc0000] hover:bg-[#e60000] text-white text-xs font-bold uppercase rounded-lg"
                           >
                             Aplicar
                           </Button>
                         </div>
                         {cuponAplicado && (
-                          <span className="block text-[10px] text-emerald-800 font-bold bg-emerald-50 py-0.5 px-2 rounded-full w-max">
-                            Cupón SANJUAN10 Activo (-10% OFF)
+                          <span className="block text-[10px] text-[#ff3333] font-bold bg-[#cc0000]/10 border border-[#cc0000]/30 py-1 px-2.5 rounded-full w-max mt-2">
+                            Cupón SANJUAN10 Activo (-10% OFF aplicado)
                           </span>
                         )}
                       </div>
 
                       {/* Payment Method Selector */}
-                      <div className="space-y-2">
-                        <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <div className="space-y-3">
+                        <Label className="text-xs font-bold text-gray-400 uppercase tracking-widest">
                           Método de Pago Preferido *
                         </Label>
                         <div className="grid grid-cols-2 gap-4">
@@ -558,12 +610,12 @@ export default function CheckoutStepperPage() {
                             onClick={() => setMetodoPago('Transferencia QR')}
                             className={`p-4 border rounded-xl flex flex-col items-center justify-center gap-2.5 transition-all text-center ${
                               metodoPago === 'Transferencia QR' 
-                                ? 'border-[#9A3412] bg-orange-50/10 text-[#9A3412] ring-1 ring-[#9A3412]' 
-                                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                                ? 'border-[#cc0000] bg-[#cc0000]/5 text-white ring-1 ring-[#cc0000] shadow-[0_0_15px_rgba(204,0,0,0.1)]' 
+                                : 'border-[#333333] bg-[#1a1a1a] text-gray-400 hover:text-white hover:bg-[#262626]'
                             }`}
                           >
-                            <Landmark className="w-5 h-5 shrink-0" />
-                            <span className="font-bold text-xs">Transferencia QR</span>
+                            <Landmark className="w-5 h-5 shrink-0 text-[#cc0000]" />
+                            <span className="font-bold text-xs uppercase tracking-wide">Transferencia QR</span>
                           </button>
 
                           <button
@@ -571,12 +623,12 @@ export default function CheckoutStepperPage() {
                             onClick={() => setMetodoPago('Efectivo')}
                             className={`p-4 border rounded-xl flex flex-col items-center justify-center gap-2.5 transition-all text-center ${
                               metodoPago === 'Efectivo' 
-                                ? 'border-[#9A3412] bg-orange-50/10 text-[#9A3412] ring-1 ring-[#9A3412]' 
-                                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                                ? 'border-[#cc0000] bg-[#cc0000]/5 text-white ring-1 ring-[#cc0000] shadow-[0_0_15px_rgba(204,0,0,0.1)]' 
+                                : 'border-[#333333] bg-[#1a1a1a] text-gray-400 hover:text-white hover:bg-[#262626]'
                             }`}
                           >
-                            <CreditCard className="w-5 h-5 shrink-0" />
-                            <span className="font-bold text-xs">Efectivo contra entrega</span>
+                            <CreditCard className="w-5 h-5 shrink-0 text-[#cc0000]" />
+                            <span className="font-bold text-xs uppercase tracking-wide">Efectivo contra entrega</span>
                           </button>
                         </div>
                       </div>
@@ -584,22 +636,22 @@ export default function CheckoutStepperPage() {
                   )}
 
                   {/* Navigation Footer */}
-                  <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
+                  <div className="mt-8 pt-6 border-t border-[#333333] flex justify-between items-center">
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={prevStep}
                       disabled={currentStep === 1 || isPending}
-                      className="text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1 rounded-lg text-xs"
+                      className="text-gray-400 hover:text-white hover:bg-[#262626] transition-all flex items-center gap-1 rounded-lg text-xs"
                     >
-                      <ArrowLeft className="w-4 h-4" /> Anterior
+                      <ArrowLeft className="w-4 h-4 text-[#cc0000]" /> Anterior
                     </Button>
 
                     {currentStep < 4 ? (
                       <Button
                         type="button"
                         onClick={nextStep}
-                        className="bg-[#166534] hover:bg-[#114f27] text-white text-xs font-semibold py-2 px-5 rounded-lg flex items-center gap-1"
+                        className="bg-[#cc0000] hover:bg-[#e60000] text-white text-xs font-bold uppercase tracking-wider py-2.5 px-5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
                       >
                         Siguiente <ArrowRight className="w-4 h-4" />
                       </Button>
@@ -608,12 +660,12 @@ export default function CheckoutStepperPage() {
                         type="button"
                         onClick={handleCheckoutSubmit}
                         disabled={isPending}
-                        className="bg-[#9A3412] hover:bg-[#7c2a0e] text-white text-xs font-semibold py-2 px-6 rounded-lg flex items-center gap-1.5"
+                        className="bg-[#cc0000] hover:bg-[#e60000] text-white text-xs font-bold uppercase tracking-wider py-2.5 px-6 rounded-lg flex items-center gap-1.5 shadow-lg shadow-[#cc0000]/10 transition-all active:scale-95"
                       >
                         {isPending ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Confirmando pedido...
+                            Procesando pedido...
                           </>
                         ) : (
                           <>
@@ -632,27 +684,28 @@ export default function CheckoutStepperPage() {
 
           {/* Right Side: Resumen Sidebar */}
           <div className="lg:col-span-4 space-y-6">
-            <Card className="border border-slate-100 bg-white rounded-2xl shadow-sm">
-              <CardHeader className="pb-3 border-b border-slate-100">
-                <CardTitle className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+            <Card className="border border-[#333333] bg-[#121212] rounded-2xl shadow-2xl relative overflow-hidden">
+              <div className="h-[2px] bg-gradient-to-r from-transparent via-[#cc0000] to-transparent" />
+              <CardHeader className="pb-3 border-b border-[#262626]">
+                <span className="text-xs font-bold text-white uppercase tracking-widest">
                   Resumen de Compra
-                </CardTitle>
+                </span>
               </CardHeader>
               
               <CardContent className="p-6 space-y-4">
                 <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
                   {cart.length === 0 ? (
-                    <div className="text-center py-4 text-slate-400 text-xs font-mono">
+                    <div className="text-center py-4 text-gray-500 text-xs font-mono">
                       Tu carrito está vacío.
                     </div>
                   ) : (
                     cart.map(item => (
-                      <div key={item.promotion.id} className="flex justify-between items-start text-xs border-b border-slate-50 pb-2.5 last:border-0 last:pb-0">
+                      <div key={item.promotion.id} className="flex justify-between items-start text-xs border-b border-[#262626] pb-2.5 last:border-0 last:pb-0">
                         <div className="space-y-0.5 max-w-[70%]">
-                          <span className="block font-bold text-slate-800 leading-tight">{item.promotion.titulo}</span>
-                          <span className="block text-[10px] text-slate-400 font-mono">Cantidad: {item.cantidad}</span>
+                          <span className="block font-bold text-white leading-tight">{item.promotion.titulo}</span>
+                          <span className="block text-[10px] text-gray-500 font-mono">Cantidad: {item.cantidad} unidades</span>
                         </div>
-                        <span className="font-bold font-mono text-[#9A3412]">
+                        <span className="font-bold font-mono text-[#cc0000] shrink-0">
                           Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}
                         </span>
                       </div>
@@ -660,22 +713,22 @@ export default function CheckoutStepperPage() {
                   )}
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 space-y-2">
-                  <div className="flex justify-between text-xs text-slate-500">
+                <div className="pt-4 border-t border-[#262626] space-y-2">
+                  <div className="flex justify-between text-xs text-gray-400">
                     <span>Subtotal:</span>
                     <span className="font-mono">Bs. {subtotalBs.toFixed(2)}</span>
                   </div>
                   
                   {descuentoBs > 0 && (
-                    <div className="flex justify-between text-xs text-emerald-800">
+                    <div className="flex justify-between text-xs text-[#ff3333]">
                       <span>Descuento aplicado:</span>
                       <span className="font-mono font-semibold">- Bs. {descuentoBs.toFixed(2)}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between items-baseline pt-2 border-t border-slate-50">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Neto:</span>
-                    <span className="text-xl font-bold font-mono text-[#9A3412]">Bs. {totalBs.toFixed(2)}</span>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-[#262626]">
+                    <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Total Neto:</span>
+                    <span className="text-xl font-black font-mono text-[#cc0000] drop-shadow-[0_0_10px_rgba(204,0,0,0.25)]">Bs. {totalBs.toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>

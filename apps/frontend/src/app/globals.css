@@ -49,38 +49,38 @@
 }
 
 :root {
-  --background: oklch(0.985 0.005 240); /* #F8FAFC claro mate */
-  --foreground: oklch(0.145 0.015 240); /* #0F172A Ink oscuro */
-  --card: oklch(1 0 0); /* #FFFFFF superficies blancas */
-  --card-foreground: oklch(0.145 0.015 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0.015 240);
-  --primary: oklch(0.42 0.12 145); /* #166534 Verde Oliva Profundo */
-  --primary-foreground: oklch(0.985 0.005 240);
-  --secondary: oklch(0.45 0.16 25); /* #9A3412 Tierra/Fuego */
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.95 0.01 240);
-  --muted-foreground: oklch(0.45 0.02 240);
-  --accent: oklch(0.95 0.01 240);
-  --accent-foreground: oklch(0.42 0.12 145);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0.005 240);
-  --input: oklch(0.922 0.005 240);
-  --ring: oklch(0.42 0.12 145);
-  --chart-1: oklch(0.42 0.12 145);
-  --chart-2: oklch(0.45 0.16 25);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.75rem; /* rounded-xl premium */
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.145 0.015 240);
-  --sidebar-primary: oklch(0.42 0.12 145);
-  --sidebar-primary-foreground: oklch(0.985 0.005 240);
-  --sidebar-accent: oklch(0.95 0.01 240);
-  --sidebar-accent-foreground: oklch(0.42 0.12 145);
-  --sidebar-border: oklch(0.922 0.005 240);
-  --sidebar-ring: oklch(0.42 0.12 145);
+  --background: oklch(0.12 0 0); /* #0a0a0a Negro profundo */
+  --foreground: oklch(0.98 0 0); /* #ffffff Blanco puro */
+  --card: oklch(0.16 0 0); /* #121212 Gris carbón oscuro */
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.16 0 0);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.50 0.28 25); /* #cc0000 Rojo Haas Intenso */
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.20 0 0); /* #1a1a1a Gris metálico */
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.20 0 0);
+  --muted-foreground: oklch(0.70 0 0); /* #a3a3a3 gris claro */
+  --accent: oklch(0.24 0 0);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.60 0.25 25);
+  --border: oklch(0.30 0 0); /* #333333 gris metal sutil */
+  --input: oklch(0.24 0 0);
+  --ring: oklch(0.50 0.28 25);
+  --chart-1: oklch(0.50 0.28 25);
+  --chart-2: oklch(0.20 0 0);
+  --chart-3: oklch(0.40 0 0);
+  --chart-4: oklch(0.30 0 0);
+  --chart-5: oklch(0.20 0 0);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.16 0 0);
+  --sidebar-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.50 0.28 25);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.20 0 0);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(0.30 0 0);
+  --sidebar-ring: oklch(0.50 0.28 25);
 }
 
 .dark {
