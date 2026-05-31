@@ -37,15 +37,25 @@ export default function ReservasPage() {
       try {
         const data = await getPromociones(true);
         // Filtrar y mapear tipados
-        const mapped = (data as any[]).map(item => ({
-          id: item.id,
-          titulo: item.titulo,
-          descripcion: item.descripcion,
-          precio_bs: Number(item.precio_bs),
-          stock_disponible: Number(item.stock_disponible),
-          imagen_url: item.imagen_url,
-          activo: item.activo
-        }));
+        const mapped = (data as any[]).map(item => {
+          let customImg = item.imagen_url;
+          if (item.titulo.includes("Clásico")) {
+            customImg = "/images/combo_clasico.png";
+          } else if (item.titulo.includes("Premium") || item.titulo.includes("Parrillero")) {
+            customImg = "/images/combo_premium.png";
+          } else if (item.titulo.includes("Familiar")) {
+            customImg = "/images/pack_familiar.png";
+          }
+          return {
+            id: item.id,
+            titulo: item.titulo,
+            descripcion: item.descripcion,
+            precio_bs: Number(item.precio_bs),
+            stock_disponible: Number(item.stock_disponible),
+            imagen_url: customImg,
+            activo: item.activo
+          };
+        });
         setPromociones(mapped);
         
         // Inicializar cantidades de compra por ID

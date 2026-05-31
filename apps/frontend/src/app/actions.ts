@@ -170,19 +170,25 @@ export async function eliminarPromoAction(id: string) {
 export async function getPedidos() {
   const supabase = await createClient();
 
-  // Obtener todos los pedidos con la información de los usuarios relacionales
+  // Obtener todos los pedidos con la información relacional completa
   const { data, error } = await supabase
     .from('pedidos')
     .select(`
-      id,
-      total_bs,
-      estado,
-      fecha_creacion,
+      *,
       usuarios (
         email,
         empresa,
         nit,
         sucursal
+      ),
+      pedido_items (
+        id,
+        cantidad,
+        subtotal_bs,
+        promociones_sanjuan (
+          titulo,
+          precio_bs
+        )
       )
     `)
     .order('fecha_creacion', { ascending: false });

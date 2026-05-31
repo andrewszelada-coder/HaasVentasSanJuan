@@ -38,7 +38,7 @@ export default function LandingPage() {
       price: "120.00",
       normalPrice: "150.00",
       discount: "20% OFF",
-      imageUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=500"
+      imageUrl: "/images/combo_clasico.png"
     },
     {
       title: "Combo Parrillero Premium",
@@ -46,7 +46,7 @@ export default function LandingPage() {
       price: "195.00",
       normalPrice: "260.00",
       discount: "25% OFF",
-      imageUrl: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500"
+      imageUrl: "/images/combo_premium.png"
     },
     {
       title: "Pack Familiar Haas",
@@ -54,12 +54,12 @@ export default function LandingPage() {
       price: "315.00",
       normalPrice: "450.00",
       discount: "30% OFF",
-      imageUrl: "https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?w=500"
+      imageUrl: "/images/pack_familiar.png"
     }
   ];
 
   return (
-    <div className="bg-[#0a0a0a] min-h-screen text-white font-sans selection:bg-[#cc0000] selection:text-white">
+    <div className="bg-background min-h-screen text-foreground font-sans selection:bg-[#cc0000] selection:text-white">
       {/* Header / Navbar */}
       <header className="sticky top-0 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-[#333333] z-50 transition-all">
         <div className="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
