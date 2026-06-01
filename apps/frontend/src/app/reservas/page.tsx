@@ -4,10 +4,12 @@ import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getPromociones, logoutAction } from '@/app/actions';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Flame, LogOut, ShoppingBag, Plus, Minus, Lock, Trash2, ArrowRight, FlameKindling } from 'lucide-react';
+import { Flame, LogOut, ShoppingBag, Plus, Minus, Lock, Trash2, ArrowRight, FlameKindling, CalendarCheck, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface Promotion {
   id: string;
@@ -25,18 +27,45 @@ interface CartItem {
 }
 
 export default function ReservasPage() {
+  const supabase = createClient();
   const [promociones, setPromociones] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isPending, startTransition] = useTransition();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+  // Countdown to San Juan Night (June 23, 2026 20:00:00)
+  useEffect(() => {
+    const targetDate = new Date('2026-06-23T20:00:00-04:00'); // Zona horaria de Bolivia/La Paz
+
+    const calculateTime = () => {
+      const difference = +targetDate - +new Date();
+      
+      if (difference > 0) {
+        setTimeLeft({
+          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+          minutes: Math.floor((difference / 1000 / 60) % 60),
+          seconds: Math.floor((difference / 1000) % 60),
+        });
+      }
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     async function loadData() {
       try {
         const data = await getPromociones(true);
-        // Filtrar y mapear tipados
+        // Mapeo dinámico de imágenes gourmet locales generadas por IA
         const mapped = (data as any[]).map(item => {
           let customImg = item.imagen_url;
           if (item.titulo.includes("Clásico")) {
@@ -80,10 +109,34 @@ export default function ReservasPage() {
         setCart(JSON.parse(savedCart));
       } catch {}
     }
+  }, []);
 
-    // Verificar si hay una sesión activa de Supabase localmente para decidir si mostramos Salir
-    const hasSession = document.cookie.includes('sb-') || localStorage.getItem('haas_session_active') === 'true';
-    setIsAuthenticated(hasSession);
+  useEffect(() => {
+    async function checkUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUser(user);
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    }
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Guardar carrito en localStorage cuando cambie
@@ -179,74 +232,151 @@ export default function ReservasPage() {
   const handleLogout = () => {
     startTransition(async () => {
       localStorage.removeItem('haas_session_active');
+      await supabase.auth.signOut();
       await logoutAction();
     });
+  };
+
+  const getInitials = () => {
+    if (user?.user_metadata?.nombres) {
+      const first = user.user_metadata.nombres.charAt(0);
+      const last = user.user_metadata.apellidos ? user.user_metadata.apellidos.charAt(0) : '';
+      return `${first}${last}`.toUpperCase();
+    }
+    if (user?.user_metadata?.empresa) {
+      return user.user_metadata.empresa.substring(0, 2).toUpperCase();
+    }
+    return 'C';
   };
 
   const totalBs = cart.reduce((sum, item) => sum + item.promotion.precio_bs * item.cantidad, 0);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white pb-24 font-sans selection:bg-[#cc0000] selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-[#cc0000] selection:text-white">
       {/* Header */}
-      <header className="bg-[#0a0a0a]/80 backdrop-blur-md border-b border-[#333333] sticky top-0 z-30 transition-all">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 transition-all">
         <div className="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
-          <div className="flex items-center gap-2.5">
-            <Flame className="w-5 h-5 text-[#cc0000] animate-pulse" />
-            <span className="font-extrabold text-sm tracking-widest text-white uppercase">HAAS PORTAL RESERVAS</span>
+          <div className="flex items-center">
+            {/* Logo removido de la barra de navegación superior */}
           </div>
 
           <div className="flex items-center gap-4">
-            <Link 
-              href="/login" 
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-all py-1.5 px-3 bg-[#121212] hover:bg-[#1c1c1c] border border-[#333333] rounded-lg group shadow-inner"
-              title="Acceso exclusivo para administradores"
-            >
-              <Lock className="w-3.5 h-3.5 text-gray-600 group-hover:text-[#cc0000] transition-colors" />
-              <span className="font-mono font-semibold tracking-wide">Portal Admin</span>
-            </Link>
+            {isAuthenticated && user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="flex items-center gap-2.5 py-1 px-3 rounded-full hover:bg-slate-50 border border-slate-200/80 bg-white transition-all shadow-sm focus:outline-none cursor-pointer"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#cc0000] to-red-500 text-white font-extrabold text-xs flex items-center justify-center shadow-md">
+                    {getInitials()}
+                  </div>
+                  <span className="text-xs font-bold text-slate-800 max-w-[120px] truncate hidden sm:inline">
+                    {user.user_metadata?.nombres || user.user_metadata?.empresa || 'Cliente'}
+                  </span>
+                </button>
 
-            {isAuthenticated && (
-              <button
-                onClick={handleLogout}
-                disabled={isPending}
-                className="text-xs text-gray-400 hover:text-white flex items-center gap-1.5 transition-colors uppercase font-mono bg-[#121212] border border-[#333333] px-3 py-1.5 rounded-lg"
+                <AnimatePresence>
+                  {dropdownOpen && (
+                    <>
+                      {/* Backdrop transparent to close dropdown */}
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setDropdownOpen(false)} 
+                      />
+                      
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 overflow-hidden text-left"
+                      >
+                        <div className="px-4 py-2 border-b border-slate-100">
+                          <span className="block text-xs font-bold text-slate-900 truncate">
+                            {user.user_metadata?.nombres ? `${user.user_metadata.nombres} ${user.user_metadata.apellidos || ''}` : (user.user_metadata?.empresa || 'Cliente Haas')}
+                          </span>
+                          <span className="block text-[10px] text-slate-400 font-mono truncate">
+                            {user.email}
+                          </span>
+                          {user.user_metadata?.nit && (
+                            <span className="block text-[9px] text-slate-400 font-mono mt-0.5">
+                              NIT: {user.user_metadata.nit}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="p-1">
+                          <button
+                            onClick={() => {
+                              setDropdownOpen(false);
+                              handleLogout();
+                            }}
+                            disabled={isPending}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 hover:text-[#cc0000] flex items-center gap-2 transition-colors cursor-pointer"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                            Cerrar Sesión
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <Link 
+                href="/login" 
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-[#cc0000] transition-all py-1.5 px-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg group shadow-sm font-semibold animate-all duration-300"
+                title="Acceso exclusivo para administradores"
               >
-                <LogOut className="w-3.5 h-3.5 text-[#cc0000]" />
-                <span>Salir</span>
-              </button>
+                <Lock className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#cc0000] transition-colors" />
+                <span className="font-mono">Iniciar Sesión</span>
+              </Link>
             )}
           </div>
         </div>
       </header>
 
+      {/* Large Campaign Banner (Se ve completa sin recortes) */}
+      <div className="max-w-7xl mx-auto px-6 mt-6 animate-fade-in animate-duration-300">
+        <Image 
+          src="/images/banner-grande.png" 
+          width={1280} 
+          height={320} 
+          alt="Campaña Haas San Juan 2026" 
+          priority 
+          className="w-full h-auto rounded-3xl shadow-md border border-slate-200/80"
+        />
+      </div>
+
       {/* Main Grid */}
-      <div className="max-w-7xl mx-auto px-6 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="max-w-7xl mx-auto px-6 mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in animate-duration-300">
         
         {/* Left Side: Catalog */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="flex justify-between items-center pb-4 border-b border-[#333333]">
+          <div className="flex justify-between items-center pb-4 border-b border-slate-200">
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
-                <FlameKindling className="w-6 h-6 text-[#cc0000] shrink-0" />
+              <h1 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2 uppercase">
+                <FlameKindling className="w-6 h-6 text-[#cc0000] shrink-0 animate-bounce" />
                 Catálogo de San Juan 2026
               </h1>
-              <p className="text-gray-400 text-xs mt-1">Precios corporativos garantizados de fábrica para sucursales B2B e invitados.</p>
+              <p className="text-slate-500 text-xs mt-1 font-medium">Precios de fábrica garantizados para todos nuestros clientes.</p>
             </div>
           </div>
 
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[1, 2, 3, 4].map(n => (
-                <div key={n} className="bg-[#121212] border border-[#333333] rounded-2xl p-6 space-y-4 animate-pulse">
-                  <div className="bg-[#1a1a1a] rounded-xl h-48 w-full" />
-                  <div className="h-4 bg-[#1a1a1a] rounded w-1/3" />
-                  <div className="h-6 bg-[#1a1a1a] rounded w-3/4" />
-                  <div className="h-4 bg-[#1a1a1a] rounded w-full" />
+                <div key={n} className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 animate-pulse">
+                  <div className="bg-slate-100 rounded-2xl h-48 w-full" />
+                  <div className="h-4 bg-slate-100 rounded w-1/3" />
+                  <div className="h-6 bg-slate-100 rounded w-3/4" />
+                  <div className="h-4 bg-slate-100 rounded w-full" />
                 </div>
               ))}
             </div>
           ) : promociones.length === 0 ? (
-            <Card className="border border-[#333333] p-12 text-center text-gray-500 bg-[#121212]">
+            <Card className="border border-slate-200 p-12 text-center text-slate-400 bg-white rounded-3xl shadow-sm">
               No hay promociones activas registradas para la campaña.
             </Card>
           ) : (
@@ -257,41 +387,38 @@ export default function ReservasPage() {
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   whileHover={{ y: -4 }}
-                  className="bg-[#121212] border border-[#333333] hover:border-[#cc0000]/50 rounded-2xl overflow-hidden p-5 flex flex-col justify-between hover:shadow-[0_0_20px_rgba(204,0,0,0.15)] transition-all duration-300"
+                  className="bg-white border border-slate-200/80 hover:border-[#cc0000]/40 rounded-3xl overflow-hidden p-5 flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300"
                 >
                   <div>
-                    <div className="relative overflow-hidden rounded-xl mb-4 aspect-[4/3] bg-[#1a1a1a] border border-[#262626]">
+                    <div className="relative overflow-hidden rounded-2xl mb-4 aspect-[4/3] bg-slate-50 border border-slate-100">
                       <img
                         src={promo.imagen_url}
                         alt={promo.titulo}
                         className="object-cover w-full h-full hover:scale-105 transition-transform duration-500"
                       />
                     </div>
-                    <span className="text-[9px] text-[#ff3333] font-bold uppercase tracking-widest bg-[#cc0000]/10 border border-[#cc0000]/25 px-2.5 py-1 rounded-full">
+                    <span className="text-[9px] text-[#cc0000] font-extrabold uppercase tracking-widest bg-[#cc0000]/10 border border-[#cc0000]/15 px-2.5 py-1 rounded-full shadow-sm">
                       Campaña San Juan
                     </span>
-                    <h3 className="text-lg font-bold text-white mt-3 mb-1.5 leading-tight">{promo.titulo}</h3>
-                    <p className="text-gray-400 text-xs leading-relaxed mb-4 line-clamp-2">{promo.descripcion}</p>
+                    <h3 className="text-lg font-bold text-slate-950 mt-3 mb-1.5 leading-tight">{promo.titulo}</h3>
+                    <p className="text-slate-500 text-xs leading-relaxed mb-4 line-clamp-2 font-medium">{promo.descripcion}</p>
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-xs text-gray-500 font-mono">Precio Unitario:</span>
-                      <span className="text-xl font-black font-mono text-[#cc0000] drop-shadow-[0_0_10px_rgba(204,0,0,0.25)]">Bs. {promo.precio_bs.toFixed(2)}</span>
+                    <div className="flex justify-between items-baseline pt-3 border-t border-slate-100">
+                      <span className="text-xs text-slate-400 font-mono">Precio Unitario:</span>
+                      <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)}</span>
                     </div>
 
-                    <div className="flex justify-between text-[11px] font-mono text-gray-500 pb-1.5 border-b border-[#262626]">
-                      <span>Stock disponible:</span>
-                      <span className="font-bold text-white">{promo.stock_disponible} unidades</span>
-                    </div>
+
 
                     <div className="flex items-center gap-3">
                       {/* Quantity Selector with strict QA block */}
-                      <div className="flex items-center border border-[#333333] rounded-lg overflow-hidden bg-[#1a1a1a]">
+                      <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
                         <button
                           type="button"
                           onClick={() => handleDecrement(promo.id)}
-                          className="px-2.5 py-2 hover:bg-[#262626] text-gray-400 transition-colors"
+                          className="px-2.5 py-2 hover:bg-slate-100 text-slate-500 transition-colors"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
@@ -305,12 +432,12 @@ export default function ReservasPage() {
                             }
                           }}
                           onChange={(e) => handleQuantityChange(promo.id, e.target.value, promo.stock_disponible)}
-                          className="w-12 text-center text-sm font-bold text-white border-none bg-transparent focus:ring-0 focus:outline-none"
+                          className="w-12 text-center text-sm font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none"
                         />
                         <button
                           type="button"
                           onClick={() => handleIncrement(promo.id, promo.stock_disponible)}
-                          className="px-2.5 py-2 hover:bg-[#262626] text-gray-400 transition-colors"
+                          className="px-2.5 py-2 hover:bg-slate-100 text-slate-500 transition-colors"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
@@ -331,105 +458,186 @@ export default function ReservasPage() {
           )}
         </div>
 
-        {/* Right Side: Floating / Sticky Cart Summary */}
-        <div className="lg:col-span-4">
-          <Card className="border border-[#333333] shadow-2xl bg-[#121212] rounded-2xl sticky top-24 overflow-hidden">
-            <div className="h-[2px] bg-gradient-to-r from-transparent via-[#cc0000] to-transparent" />
-            <CardContent className="p-6 space-y-6">
-              <div className="flex justify-between items-center pb-4 border-b border-[#262626]">
-                <div className="flex items-center gap-2">
-                  <ShoppingBag className="w-5 h-5 text-[#cc0000]" />
-                  <span className="font-bold text-white uppercase tracking-wider text-sm">Resumen de Reserva</span>
+        {/* Right Side: Countdown and Sticky Summary */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* Corporate Countdown Box */}
+          <div className="bg-white border border-slate-200/80 shadow-md rounded-3xl p-6 text-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#cc0000]" />
+            <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-3">
+              Cuenta regresiva para la Noche de San Juan
+            </h3>
+            
+            <div className="grid grid-cols-4 gap-2.5 mb-4">
+              {[
+                { label: "Días", value: timeLeft.days },
+                { label: "Horas", value: timeLeft.hours },
+                { label: "Min.", value: timeLeft.minutes },
+                { label: "Seg.", value: timeLeft.seconds },
+              ].map((item, index) => (
+                <div key={index} className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 shadow-inner">
+                  <span className="block text-2xl font-extrabold font-mono text-[#cc0000] leading-none mb-1">
+                    {String(item.value).padStart(2, '0')}
+                  </span>
+                  <span className="text-[8px] text-slate-400 uppercase font-bold tracking-widest">
+                    {item.label}
+                  </span>
                 </div>
-                <span className="text-[10px] font-bold bg-[#cc0000]/10 border border-[#cc0000]/25 text-[#ff3333] px-2.5 py-0.5 rounded-full font-mono">
-                  {cart.length} combos
-                </span>
-              </div>
+              ))}
+            </div>
 
-              <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
-                {cart.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 text-xs font-mono">
-                    No has añadido combos a tu reserva todavía.
+            <div className="bg-[#cc0000]/5 border border-[#cc0000]/10 rounded-2xl p-3 flex items-center gap-3 text-left">
+              <CalendarCheck className="w-6.5 h-6.5 text-[#cc0000] shrink-0" />
+              <div>
+                <span className="block font-bold text-slate-900 text-xs">Reserva 100% Garantizada</span>
+                <span className="block text-[9px] text-slate-500 font-medium">Aseguramos la entrega directa desde fábrica para el 23 de Junio.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky Summary Card */}
+          <div className="sticky top-24">
+            <Card className="border border-slate-200/80 shadow-xl bg-white rounded-3xl overflow-hidden">
+              <div className="h-[3px] bg-[#cc0000]" />
+              <CardContent className="p-6 space-y-6">
+                <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5 text-[#cc0000]" />
+                    <span className="font-black text-slate-900 uppercase tracking-wider text-xs">Resumen de Reserva</span>
                   </div>
-                ) : (
-                  cart.map(item => (
-                    <div key={item.promotion.id} className="flex flex-col gap-2 pb-4 border-b border-[#262626] last:border-0 last:pb-0">
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-0.5">
-                          <span className="block font-bold text-white text-xs leading-snug">{item.promotion.titulo}</span>
-                          <span className="block text-[10px] text-gray-500 font-mono">
-                            Bs. {item.promotion.precio_bs.toFixed(2)} c/u
-                          </span>
+                  <span className="text-[10px] font-bold bg-[#cc0000]/10 border border-[#cc0000]/15 text-[#cc0000] px-2.5 py-0.5 rounded-full font-mono">
+                    {cart.length} combos
+                  </span>
+                </div>
+
+                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+                  {cart.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 text-xs font-mono font-medium">
+                      No has añadido combos a tu reserva todavía.
+                    </div>
+                  ) : (
+                    cart.map(item => (
+                      <div key={item.promotion.id} className="flex flex-col gap-2 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="space-y-0.5">
+                            <span className="block font-bold text-slate-900 text-xs leading-snug">{item.promotion.titulo}</span>
+                            <span className="block text-[10px] text-slate-400 font-mono">
+                              Bs. {item.promotion.precio_bs.toFixed(2)} c/u
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-bold font-mono text-xs text-[#cc0000]">
+                              Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}
+                            </span>
+                            <button
+                              onClick={() => handleRemoveFromCart(item.promotion.id)}
+                              className="text-slate-300 hover:text-red-600 text-xs font-bold transition-colors"
+                              title="Eliminar combo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2.5">
-                          <span className="font-bold font-mono text-xs text-[#cc0000]">
-                            Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}
-                          </span>
+
+                        {/* QA Editable Quantity Input inside sidebar cart */}
+                        <div className="flex items-center border border-slate-200 rounded bg-slate-50 w-fit">
                           <button
-                            onClick={() => handleRemoveFromCart(item.promotion.id)}
-                            className="text-gray-500 hover:text-red-500 text-xs font-bold transition-colors"
-                            title="Eliminar combo"
+                            type="button"
+                            onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad - 1, item.promotion.stock_disponible)}
+                            className="px-2 py-1 hover:bg-slate-100 text-slate-500 transition-colors"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Minus className="w-2.5 h-2.5" />
+                          </button>
+                          <input
+                            type="text"
+                            value={item.cantidad}
+                            onKeyDown={(e) => {
+                              if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
+                                e.preventDefault();
+                              }
+                            }}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 1;
+                              handleUpdateCartQty(item.promotion.id, val, item.promotion.stock_disponible);
+                            }}
+                            className="w-8 text-center text-[10px] font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad + 1, item.promotion.stock_disponible)}
+                            className="px-2 py-1 hover:bg-slate-100 text-slate-500 transition-colors"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
                           </button>
                         </div>
                       </div>
-
-                      {/* QA Editable Quantity Input inside sidebar cart */}
-                      <div className="flex items-center border border-[#262626] rounded bg-[#1a1a1a] w-fit">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad - 1, item.promotion.stock_disponible)}
-                          className="px-2 py-1 hover:bg-[#262626] text-gray-400 transition-colors"
-                        >
-                          <Minus className="w-2.5 h-2.5" />
-                        </button>
-                        <input
-                          type="text"
-                          value={item.cantidad}
-                          onKeyDown={(e) => {
-                            if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
-                              e.preventDefault();
-                            }
-                          }}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 1;
-                            handleUpdateCartQty(item.promotion.id, val, item.promotion.stock_disponible);
-                          }}
-                          className="w-8 text-center text-[10px] font-bold text-white border-none bg-transparent focus:ring-0 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad + 1, item.promotion.stock_disponible)}
-                          className="px-2 py-1 hover:bg-[#262626] text-gray-400 transition-colors"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {cart.length > 0 && (
-                <div className="pt-4 border-t border-[#262626] space-y-4">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Monto Total:</span>
-                    <span className="text-2xl font-black font-mono text-[#cc0000] drop-shadow-[0_0_10px_rgba(204,0,0,0.2)]">Bs. {totalBs.toFixed(2)}</span>
-                  </div>
-
-                  <Link href="/checkout" className="block w-full">
-                    <Button className="w-full bg-[#cc0000] hover:bg-[#e60000] text-white py-3 rounded-lg flex items-center justify-center gap-2 font-bold uppercase tracking-wider text-xs shadow-lg shadow-[#cc0000]/10 transition-all hover:scale-[1.01]">
-                      Continuar a Checkout <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </Link>
+                    ))
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+
+                {cart.length > 0 && (
+                  <div className="pt-4 border-t border-slate-100 space-y-4">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">Monto Total:</span>
+                      <span className="text-2xl font-black font-mono text-[#cc0000]">Bs. {totalBs.toFixed(2)}</span>
+                    </div>
+
+                    <Link href="/checkout" className="block w-full">
+                      <Button className="w-full bg-[#cc0000] hover:bg-[#e60000] text-white py-3 rounded-lg flex items-center justify-center gap-2 font-bold uppercase tracking-wider text-xs shadow-lg shadow-[#cc0000]/10 transition-all hover:scale-[1.01]">
+                        Continuar a Checkout <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
       </div>
+
+      {/* Footer */}
+      <footer className="bg-slate-950 border-t border-slate-900 mt-16 py-12 text-white">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-[#cc0000]/10 flex items-center justify-center rounded-lg border border-[#cc0000]/20 shadow-sm">
+              <Flame className="w-4 h-4 text-[#cc0000] animate-pulse" />
+            </div>
+            <span className="font-black tracking-widest text-white uppercase text-xs">INDUSTRIAS HAAS LTDA.</span>
+          </div>
+          <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+            <span className="text-[10px] text-slate-500 font-mono tracking-wider">
+              © 2026 INDUSTRIAS HAAS LTDA. • TODOS LOS DERECHOS RESERVADOS
+            </span>
+            <div className="flex items-center gap-3">
+              <a 
+                href="https://www.instagram.com/industriashaas?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-slate-500 hover:text-[#cc0000] hover:scale-110 transition-all p-1.5 bg-slate-900 hover:bg-slate-900 rounded-full border border-slate-900 hover:border-[#cc0000]/30 shadow-sm flex items-center justify-center"
+                title="Instagram"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+                </svg>
+              </a>
+              <a 
+                href="https://www.facebook.com/INDUSTRIASHAASLTDA" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-slate-500 hover:text-[#cc0000] hover:scale-110 transition-all p-1.5 bg-slate-900 hover:bg-slate-900 rounded-full border border-slate-900 hover:border-[#cc0000]/30 shadow-sm flex items-center justify-center"
+                title="Facebook"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

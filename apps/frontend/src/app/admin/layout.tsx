@@ -2,10 +2,10 @@
 
 import React, { useTransition } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions';
-import { Flame, ClipboardList, PackagePlus, ArrowLeft, LogOut, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ClipboardList, PackagePlus, ArrowLeft, LogOut, Loader2 } from 'lucide-react';
 
 export default function AdminLayout({
   children,
@@ -41,11 +41,15 @@ export default function AdminLayout({
       <aside className="w-64 bg-white border-r border-slate-100 flex flex-col justify-between shrink-0 sticky top-0 h-screen">
         <div>
           {/* Logo */}
-          <div className="h-16 flex items-center gap-2.5 px-6 border-b border-slate-100">
-            <div className="w-8 h-8 bg-emerald-800/10 flex items-center justify-center rounded-lg">
-              <Flame className="w-4.5 h-4.5 text-[#9A3412]" />
-            </div>
-            <span className="font-bold text-[#0F172A] text-sm tracking-tight">HAAS BACKOFFICE</span>
+          <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-100">
+            <Image 
+              src="/logo-haas.png" 
+              alt="Haas Logo" 
+              width={40} 
+              height={40} 
+              className="w-10 h-10 rounded-full object-cover shadow-sm border-2 border-gray-200"
+            />
+            <span className="font-bold text-[#0F172A] text-sm tracking-tight">PORTAL GERENCIAL</span>
           </div>
 
           {/* Navigation Links */}
@@ -95,14 +99,20 @@ export default function AdminLayout({
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* Top Navbar */}
-        <header className="h-16 bg-white border-b border-slate-100 flex items-center justify-between px-8 shrink-0">
-          <div className="text-slate-400 font-mono text-xs tracking-wider uppercase">
-            Administración Central Haas • Campaña Especial 2026
+        <header className="h-16 bg-white border-b border-slate-100 flex items-center justify-between px-8 shrink-0 relative overflow-hidden">
+          <div className="flex items-center gap-3 z-10">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
+            <span className="text-xs font-mono font-bold text-slate-600">Servicio Activo</span>
           </div>
           
-          <div className="flex items-center gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
-            <span className="text-xs font-mono text-slate-600">Servicio Activo</span>
+          <div className="h-11 w-64 md:w-80 rounded-lg overflow-hidden border border-slate-200 shadow-sm relative z-10">
+            <Image 
+              src="/banner-haas.jpg" 
+              alt="Haas Banner" 
+              fill
+              className="object-cover"
+              priority
+            />
           </div>
         </header>
 
@@ -115,3 +125,4 @@ export default function AdminLayout({
     </div>
   );
 }
+
