@@ -3,6 +3,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+// @ts-ignore
+import { Client } from 'pg';
 
 // =========================================================================
 // 1. AUTENTICACIÓN
@@ -44,7 +46,7 @@ export async function loginAction(formData: FormData) {
 export async function logoutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect('/login');
+  redirect('/reservas');
 }
 
 // =========================================================================
@@ -72,9 +74,10 @@ export async function crearPromoAction(data: {
   titulo: string;
   descripcion: string;
   precio_bs: number;
-  stock_disponible: number;
   imagen_url: string;
   activo: boolean;
+  categoria: string;
+  tipo_venta: string;
 }) {
   const supabase = await createClient();
 
@@ -83,9 +86,11 @@ export async function crearPromoAction(data: {
       titulo: data.titulo,
       descripcion: data.descripcion,
       precio_bs: data.precio_bs,
-      stock_disponible: data.stock_disponible,
+      stock_disponible: 99999,
       imagen_url: data.imagen_url || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=500',
       activo: data.activo,
+      categoria: data.categoria || 'Combos San Juan',
+      tipo_venta: data.tipo_venta || 'Unidad/Paquete',
     },
   ]);
 
@@ -102,9 +107,10 @@ export async function editarPromoAction(id: string, data: {
   titulo: string;
   descripcion: string;
   precio_bs: number;
-  stock_disponible: number;
   imagen_url: string;
   activo: boolean;
+  categoria: string;
+  tipo_venta: string;
 }) {
   const supabase = await createClient();
 
@@ -114,9 +120,11 @@ export async function editarPromoAction(id: string, data: {
       titulo: data.titulo,
       descripcion: data.descripcion,
       precio_bs: data.precio_bs,
-      stock_disponible: data.stock_disponible,
+      stock_disponible: 99999,
       imagen_url: data.imagen_url,
       activo: data.activo,
+      categoria: data.categoria,
+      tipo_venta: data.tipo_venta,
     })
     .eq('id', id);
 
@@ -205,7 +213,21 @@ export async function getPedidosCliente(userId: string) {
 
   const { data, error } = await supabase
     .from('pedidos')
-    .select('*')
+    .select(`
+      *,
+      pedido_items (
+        id,
+        cantidad,
+        subtotal_bs,
+        promociones_sanjuan (
+          id,
+          titulo,
+          precio_bs,
+          descripcion,
+          imagen_url
+        )
+      )
+    `)
     .eq('usuario_id', userId)
     .order('fecha_creacion', { ascending: false });
 
@@ -274,8 +296,18 @@ export async function crearPedidoAction(
     });
   }
 
-  // Calcular total restando descuento
-  const totalBs = Math.max(0, subtotalBs - financieroData.descuentoBs);
+  // 3. ZERO-TRUST DE DESCUENTOS Y CUPONES EN EL SERVIDOR
+  let serverDescuentoBs = 0;
+  if (financieroData.cuponAplicado) {
+    if (financieroData.cuponAplicado.toUpperCase() === 'SANJUAN10') {
+      serverDescuentoBs = subtotalBs * 0.10;
+    } else {
+      return { error: 'El cupón financiero aplicado no es válido en el servidor.' };
+    }
+  }
+
+  const finalDescuentoBs = serverDescuentoBs;
+  const totalBs = Math.max(0, subtotalBs - finalDescuentoBs);
 
   // Insertar pedido principal con datos de invitados y logística
   const { data: pedido, error: pedidoErr } = await supabase
@@ -298,7 +330,7 @@ export async function crearPedidoAction(
         indicaciones_entrega: logisticaData.indicaciones,
         // Finanzas
         cupon_aplicado: financieroData.cuponAplicado || null,
-        descuento_bs: financieroData.descuentoBs,
+        descuento_bs: finalDescuentoBs,
         metodo_pago: financieroData.metodoPago,
         // Observaciones y Fecha
         fecha_creacion: new Date().toISOString()
@@ -409,3 +441,183 @@ export async function cancelarPedidoAction(pedidoId: string) {
   revalidatePath('/admin/pedidos');
   return { success: true };
 }
+
+export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado') {
+  const supabase = await createClient();
+
+  const { data: pedido, error: fetchErr } = await supabase
+    .from('pedidos')
+    .select('estado')
+    .eq('id', pedidoId)
+    .single();
+
+  if (fetchErr || !pedido) {
+    return { error: 'El pedido no existe o no se pudo consultar.' };
+  }
+
+  const estadoAnterior = pedido.estado;
+  if (estadoAnterior === nuevoEstado) {
+    return { success: true };
+  }
+
+  // Manejo de Stock transaccional:
+  // 1. Si el pedido pasa de 'cancelado' a 'pendiente' o 'aprobado', se vuelve a reservar el stock
+  if (estadoAnterior === 'cancelado' && nuevoEstado !== 'cancelado') {
+    const { data: items } = await supabase
+      .from('pedido_items')
+      .select('promo_id, cantidad')
+      .eq('pedido_id', pedidoId);
+
+    if (items) {
+      for (const item of items) {
+        const { error: updateStockErr } = await supabase.rpc('decrementar_stock', {
+          promo_id: item.promo_id,
+          cant: item.cantidad
+        });
+
+        if (updateStockErr) {
+          const { data: currentPromo } = await supabase
+            .from('promociones_sanjuan')
+            .select('stock_disponible')
+            .eq('id', item.promo_id)
+            .single();
+          
+          const newStock = Math.max(0, (currentPromo?.stock_disponible || 0) - item.cantidad);
+          await supabase
+            .from('promociones_sanjuan')
+            .update({ stock_disponible: newStock })
+            .eq('id', item.promo_id);
+        }
+      }
+    }
+  }
+
+  // 2. Si el pedido pasa de un estado activo ('pendiente' o 'aprobado') a 'cancelado', se restaura el stock
+  if (nuevoEstado === 'cancelado' && estadoAnterior !== 'cancelado') {
+    const { data: items } = await supabase
+      .from('pedido_items')
+      .select('promo_id, cantidad')
+      .eq('pedido_id', pedidoId);
+
+    if (items) {
+      for (const item of items) {
+        const { data: promo } = await supabase
+          .from('promociones_sanjuan')
+          .select('stock_disponible')
+          .eq('id', item.promo_id)
+          .single();
+
+        if (promo) {
+          await supabase
+            .from('promociones_sanjuan')
+            .update({ stock_disponible: promo.stock_disponible + item.cantidad })
+            .eq('id', item.promo_id);
+        }
+      }
+    }
+  }
+
+  // Actualizar el estado en base de datos
+  const { error: updateErr } = await supabase
+    .from('pedidos')
+    .update({ estado: nuevoEstado })
+    .eq('id', pedidoId);
+
+  if (updateErr) {
+    return { error: updateErr.message };
+  }
+
+  revalidatePath('/admin/pedidos');
+  return { success: true };
+}
+
+export async function registrarSocioAction(data: {
+  email: string;
+  password: string;
+  nit: string;
+  empresa: string;
+  nombres?: string;
+  apellidos?: string;
+}) {
+  const connectionString = 'postgresql://postgres:andrewsjimmyzece25ApC@db.xymvwsnyvpupejjcsuxz.supabase.co:5432/postgres';
+  const client = new Client({
+    connectionString,
+    ssl: { rejectUnauthorized: false }
+  });
+
+  try {
+    await client.connect();
+
+    const userMetadata = JSON.stringify({
+      nombres: data.nombres || '',
+      apellidos: data.apellidos || '',
+      nit: data.nit || 'S/N',
+      empresa: data.empresa || 'Consumidor Final',
+      rol: 'cliente',
+      sucursal: 'Central'
+    });
+
+    const query = `
+      INSERT INTO auth.users (
+        id, 
+        instance_id, 
+        email, 
+        encrypted_password, 
+        email_confirmed_at, 
+        raw_app_meta_data, 
+        raw_user_meta_data, 
+        is_super_admin, 
+        role, 
+        aud, 
+        created_at, 
+        updated_at,
+        confirmation_token,
+        email_change,
+        email_change_token_new,
+        recovery_token,
+        phone_change,
+        phone_change_token,
+        email_change_token_current
+      )
+      VALUES (
+        gen_random_uuid(),
+        '00000000-0000-0000-0000-000000000000',
+        $1,
+        crypt($2, gen_salt('bf', 10)),
+        now(),
+        '{"provider": "email", "providers": ["email"]}',
+        $3,
+        false,
+        'authenticated',
+        'authenticated',
+        now(),
+        now(),
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        ''
+      )
+      RETURNING id;
+    `;
+
+    const res = await client.query(query, [data.email, data.password, userMetadata]);
+    const userId = res.rows[0].id;
+    await client.end();
+    
+    return { success: true, userId };
+  } catch (err: any) {
+    try {
+      await client.end();
+    } catch {}
+    
+    if (err.message.includes('unique_email') || err.message.includes('duplicate key value violates unique constraint')) {
+      return { error: 'El correo electrónico ya se encuentra registrado.' };
+    }
+    return { error: `Error de registro: ${err.message}` };
+  }
+}
+
+
