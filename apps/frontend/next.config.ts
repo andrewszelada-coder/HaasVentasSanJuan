@@ -9,10 +9,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  eslint: {
-    // Desactiva la verificación estricta de ESLint durante el despliegue en Vercel
-    ignoreDuringBuilds: true,
-  },
 };
 
 export default nextConfig;

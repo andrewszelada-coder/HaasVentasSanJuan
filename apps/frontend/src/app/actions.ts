@@ -3,9 +3,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-// @ts-ignore
-import { Client } from 'pg';
-
 // =========================================================================
 // 1. AUTENTICACIÓN
 // =========================================================================
@@ -248,7 +245,7 @@ export async function crearPedidoAction(
   financieroData: { cuponAplicado: string; descuentoBs: number; metodoPago: string }
 ) {
   const supabase = await createClient();
-  
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -270,8 +267,8 @@ export async function crearPedidoAction(
     }
 
     if (item.cantidad > promo.stock_disponible) {
-      return { 
-        error: `Inconsistencia de Stock: Solicitado ${item.cantidad} de "${promo.titulo}", pero solo quedan ${promo.stock_disponible} disponibles.` 
+      return {
+        error: `Inconsistencia de Stock: Solicitado ${item.cantidad} de "${promo.titulo}", pero solo quedan ${promo.stock_disponible} disponibles.`
       };
     }
   }
@@ -286,7 +283,7 @@ export async function crearPedidoAction(
       .select('precio_bs')
       .eq('id', item.promoId)
       .single();
-    
+
     const subtotal = Number(promo?.precio_bs || 0) * item.cantidad;
     subtotalBs += subtotal;
     itemsConSubtotal.push({
@@ -372,7 +369,7 @@ export async function crearPedidoAction(
         .select('stock_disponible')
         .eq('id', item.promoId)
         .single();
-      
+
       const newStock = Math.max(0, (currentPromo?.stock_disponible || 0) - item.cantidad);
       await supabase
         .from('promociones_sanjuan')
@@ -383,7 +380,7 @@ export async function crearPedidoAction(
 
   revalidatePath('/reservas');
   revalidatePath('/admin/pedidos');
-  
+
   return { success: true, pedidoId: pedido.id };
 }
 
@@ -481,7 +478,7 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
             .select('stock_disponible')
             .eq('id', item.promo_id)
             .single();
-          
+
           const newStock = Math.max(0, (currentPromo?.stock_disponible || 0) - item.cantidad);
           await supabase
             .from('promociones_sanjuan')
@@ -530,94 +527,3 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
   revalidatePath('/admin/pedidos');
   return { success: true };
 }
-
-export async function registrarSocioAction(data: {
-  email: string;
-  password: string;
-  nit: string;
-  empresa: string;
-  nombres?: string;
-  apellidos?: string;
-}) {
-  const connectionString = 'postgresql://postgres:andrewsjimmyzece25ApC@db.xymvwsnyvpupejjcsuxz.supabase.co:5432/postgres';
-  const client = new Client({
-    connectionString,
-    ssl: { rejectUnauthorized: false }
-  });
-
-  try {
-    await client.connect();
-
-    const userMetadata = JSON.stringify({
-      nombres: data.nombres || '',
-      apellidos: data.apellidos || '',
-      nit: data.nit || 'S/N',
-      empresa: data.empresa || 'Consumidor Final',
-      rol: 'cliente',
-      sucursal: 'Central'
-    });
-
-    const query = `
-      INSERT INTO auth.users (
-        id, 
-        instance_id, 
-        email, 
-        encrypted_password, 
-        email_confirmed_at, 
-        raw_app_meta_data, 
-        raw_user_meta_data, 
-        is_super_admin, 
-        role, 
-        aud, 
-        created_at, 
-        updated_at,
-        confirmation_token,
-        email_change,
-        email_change_token_new,
-        recovery_token,
-        phone_change,
-        phone_change_token,
-        email_change_token_current
-      )
-      VALUES (
-        gen_random_uuid(),
-        '00000000-0000-0000-0000-000000000000',
-        $1,
-        crypt($2, gen_salt('bf', 10)),
-        now(),
-        '{"provider": "email", "providers": ["email"]}',
-        $3,
-        false,
-        'authenticated',
-        'authenticated',
-        now(),
-        now(),
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        ''
-      )
-      RETURNING id;
-    `;
-
-    const res = await client.query(query, [data.email, data.password, userMetadata]);
-    const userId = res.rows[0].id;
-    await client.end();
-    
-    return { success: true, userId };
-  } catch (err: any) {
-    try {
-      await client.end();
-    } catch {}
-    
-    if (err.message.includes('unique_email') || err.message.includes('duplicate key value violates unique constraint')) {
-      return { error: 'El correo electrónico ya se encuentra registrado.' };
-    }
-    return { error: `Error de registro: ${err.message}` };
-  }
-}
-
-
