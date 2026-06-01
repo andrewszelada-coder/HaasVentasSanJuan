@@ -65,10 +65,20 @@ export default function AdminPedidosPage() {
   const [isPending, startTransition] = useTransition();
   const [actionId, setActionId] = useState<string | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const loadData = async () => {
     try {
       const data = await getPedidos();
       setPedidos(data as any[]);
+      setCurrentPage(1);
     } catch (err) {
       toast.error("Error al cargar los pedidos del Backoffice.");
     } finally {
@@ -152,7 +162,7 @@ export default function AdminPedidosPage() {
       return `
         <tr>
           <td style="mso-number-format:'@';">${p.id}</td>
-          <td>${new Date(p.fecha_creacion).toLocaleDateString('es-BO')}</td>
+          <td>${new Date(p.fecha_creacion).toLocaleDateString('es-BO', { timeZone: 'America/La_Paz' })}</td>
           <td>${p.nombres_facturacion || p.usuarios?.empresa || "Consumidor Final"}</td>
           <td>${p.usuarios?.email || "Invitado libre"}</td>
           <td>${p.telefono_contacto || "S/N"}</td>
@@ -212,7 +222,7 @@ export default function AdminPedidosPage() {
           <tr>
             <td colspan="5" style="border: none; padding: 0;">
               <div class="header-title">INDUSTRIAS HAAS - REPORTE DE RESERVAS DE VENTAS</div>
-              <div class="header-meta">Campaña San Juan 2026 | Generado: ${new Date().toLocaleString('es-BO')}</div>
+              <div class="header-meta">Campaña San Juan 2026 | Generado: ${new Date().toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}</div>
             </td>
           </tr>
         </table>
@@ -257,7 +267,8 @@ export default function AdminPedidosPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `reservas_haas_sanjuan_${new Date().toISOString().substring(0, 10)}.xls`);
+    const laPazDateStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/La_Paz' }); // sv-SE outputs YYYY-MM-DD
+    link.setAttribute("download", `reservas_haas_sanjuan_${laPazDateStr}.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -267,6 +278,10 @@ export default function AdminPedidosPage() {
 
   const totalReservas = pedidos.length;
   const ventasProyectadas = pedidos.reduce((sum, p) => p.estado !== 'cancelado' ? sum + Number(p.total_bs) : sum, 0);
+  
+  const totalPages = Math.ceil(pedidos.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPedidos = pedidos.slice(startIndex, startIndex + itemsPerPage);
   
   // Cálculo dinámico para modelo de inventario mixto (Granel Kg vs Combos Unidades)
   let granelKg = 0;
@@ -292,6 +307,15 @@ export default function AdminPedidosPage() {
   }
   if (paquetesUnid === 0 && pedidos.length > 0) {
     paquetesUnid = pedidos.reduce((acc, p) => acc + (p.pedido_items?.reduce((sum, i) => sum + i.cantidad, 0) || 0), 0) || (pedidos.length * 2);
+  }
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center select-none font-sans">
+        <Loader2 className="w-8 h-8 animate-spin text-[#cc0000] mb-2" />
+        <span className="text-xs font-bold text-slate-800 tracking-wide uppercase font-mono">Cargando Dashboard Haas...</span>
+      </div>
+    );
   }
 
   return (
@@ -385,110 +409,167 @@ export default function AdminPedidosPage() {
               No hay registros de reservas en el sistema comercial.
             </div>
           ) : (
-            <Table>
-              <TableHeader className="bg-slate-50 border-b border-slate-100">
-                <TableRow>
-                  <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">ID Pedido</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Cliente / NIT</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Sucursal</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Monto Total</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Estado</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Fecha</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pedidos.map(pedido => (
-                  <TableRow key={pedido.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                    <TableCell className="font-mono text-[10px] text-slate-400 font-semibold">
-                      {pedido.id.substring(0, 8)}...
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <span className="block font-bold text-slate-900 text-xs">
-                          {pedido.nombres_facturacion || pedido.usuarios?.empresa || 'Consumidor Final'}
-                        </span>
-                        <span className="block text-[10px] text-slate-400 font-mono font-semibold">
-                          Doc: {pedido.numero_documento || pedido.usuarios?.nit || 'S/N'}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-slate-600 text-xs font-mono font-bold">
-                      {pedido.usuarios?.sucursal || 'Central'}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs font-bold text-[#cc0000]">
-                      Bs. {Number(pedido.total_bs).toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant="outline"
-                        className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
-                          pedido.estado === 'aprobado'
-                            ? 'bg-green-100 text-green-800 font-bold border border-green-300'
-                            : pedido.estado === 'cancelado'
-                            ? 'bg-red-100 text-red-800 font-bold border border-red-300'
-                            : 'bg-yellow-100 text-yellow-800 font-bold border border-yellow-300'
-                        }`}
-                      >
-                        {pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-400 font-mono text-[10px] font-semibold">
-                      {new Date(pedido.fecha_creacion).toLocaleDateString('es-BO', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end items-center gap-3">
-                        {/* Botón Ver Detalle */}
-                        <Button
-                          onClick={() => {
-                            setSelectedPedido(pedido);
-                            setIsDetailOpen(true);
-                          }}
-                          className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-[11px] px-2.5 py-1 h-7 rounded-md font-semibold transition-colors flex items-center gap-1 shadow-sm"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
-                          Detalle
-                        </Button>
-
-                        {/* Selector de Estado Interactivo */}
-                        <div className="w-[125px] text-left">
-                          <Select 
-                            value={pedido.estado} 
-                            onValueChange={(value) => handleStatusChange(pedido.id, value as any)}
-                            disabled={isPending && actionId === pedido.id}
-                          >
-                            <SelectTrigger className="w-full h-7 text-[11px] font-bold border-slate-300 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-md cursor-pointer hover:bg-slate-50 transition-colors">
-                              <SelectValue placeholder="Cambiar estado" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
-                              <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
-                                <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-yellow-800 border border-yellow-300">
-                                  Pendiente
-                                </span>
-                              </SelectItem>
-                              <SelectItem value="aprobado" className="cursor-pointer text-gray-900 font-bold">
-                                <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
-                                  Realizado
-                                </span>
-                              </SelectItem>
-                              <SelectItem value="cancelado" className="cursor-pointer text-gray-900 font-bold">
-                                <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-800 border border-red-300">
-                                  Rechazado
-                                </span>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader className="bg-slate-50 border-b border-slate-100">
+                  <TableRow>
+                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">ID Pedido</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Cliente / NIT</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Sucursal</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Monto Total</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Estado</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Fecha</TableHead>
+                    <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Acciones</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginatedPedidos.map(pedido => (
+                    <TableRow key={pedido.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="font-mono text-[10px] text-slate-400 font-semibold">
+                        {pedido.id.substring(0, 8)}...
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <span className="block font-bold text-slate-900 text-xs">
+                            {pedido.nombres_facturacion || pedido.usuarios?.empresa || 'Consumidor Final'}
+                          </span>
+                          <span className="block text-[10px] text-slate-400 font-mono font-semibold">
+                            Doc: {pedido.numero_documento || pedido.usuarios?.nit || 'S/N'}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-slate-600 text-xs font-mono font-bold">
+                        {pedido.usuarios?.sucursal || 'Central'}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs font-bold text-[#cc0000]">
+                        Bs. {Number(pedido.total_bs).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant="outline"
+                          className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
+                            pedido.estado === 'aprobado'
+                              ? 'bg-green-100 text-green-800 font-bold border border-green-300'
+                              : pedido.estado === 'cancelado'
+                              ? 'bg-red-100 text-red-800 font-bold border border-red-300'
+                              : 'bg-yellow-100 text-yellow-800 font-bold border border-yellow-300'
+                          }`}
+                        >
+                          {pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-slate-400 font-mono text-[10px] font-semibold">
+                        {new Date(pedido.fecha_creacion).toLocaleDateString('es-BO', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          timeZone: 'America/La_Paz'
+                        })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end items-center gap-3">
+                          {/* Botón Ver Detalle */}
+                          <Button
+                            onClick={() => {
+                              setSelectedPedido(pedido);
+                              setIsDetailOpen(true);
+                            }}
+                            className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-[11px] px-2.5 py-1 h-7 rounded-md font-semibold transition-colors flex items-center gap-1 shadow-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
+                            Detalle
+                          </Button>
+
+                          {/* Selector de Estado Interactivo */}
+                          <div className="w-[125px] text-left">
+                            <Select 
+                              value={pedido.estado} 
+                              onValueChange={(value) => handleStatusChange(pedido.id, value as any)}
+                              disabled={isPending && actionId === pedido.id}
+                            >
+                              <SelectTrigger className="w-full h-7 text-[11px] font-bold border-slate-300 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-md cursor-pointer hover:bg-slate-50 transition-colors">
+                                <SelectValue placeholder="Cambiar estado" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
+                                <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
+                                  <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-yellow-800 border border-yellow-300">
+                                    Pendiente
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="aprobado" className="cursor-pointer text-gray-900 font-bold">
+                                  <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
+                                    Realizado
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="cancelado" className="cursor-pointer text-gray-900 font-bold">
+                                  <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-800 border border-red-300">
+                                    Rechazado
+                                  </span>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t border-slate-200 bg-slate-50/50 animate-fade-in">
+                  <span className="text-xs text-slate-500 font-semibold">
+                    Mostrando <span className="font-bold text-slate-900">{startIndex + 1}</span> a{' '}
+                    <span className="font-bold text-slate-900">{Math.min(startIndex + itemsPerPage, pedidos.length)}</span> de{' '}
+                    <span className="font-bold text-slate-900">{pedidos.length}</span> registros
+                  </span>
+                  <div className="flex items-center gap-1.5 select-none">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="h-8 text-xs font-semibold px-3 rounded-lg border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700"
+                    >
+                      Anterior
+                    </Button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                      if (totalPages <= 5 || page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1) {
+                        return (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(page)}
+                            className={`h-8 w-8 text-xs font-bold rounded-lg p-0 transition-all ${
+                              currentPage === page
+                                ? "bg-[#cc0000] hover:bg-[#b30000] text-white shadow-sm"
+                                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            {page}
+                          </Button>
+                        );
+                      }
+                      if (page === 2 || page === totalPages - 1) {
+                        return <span key={page} className="text-slate-400 text-xs px-1 select-none">...</span>;
+                      }
+                      return null;
+                    })}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="h-8 text-xs font-semibold px-3 rounded-lg border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700"
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -504,7 +585,7 @@ export default function AdminPedidosPage() {
                   Detalle del Pedido: #{selectedPedido.id.substring(0, 8)}
                 </DialogTitle>
                 <DialogDescription className="text-slate-500 text-xs mt-1.5 font-bold">
-                  Consolidado el {new Date(selectedPedido.fecha_creacion).toLocaleString('es-BO')}
+                  Consolidado el {new Date(selectedPedido.fecha_creacion).toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}
                 </DialogDescription>
               </DialogHeader>
 

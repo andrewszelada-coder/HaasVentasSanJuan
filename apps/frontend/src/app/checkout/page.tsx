@@ -69,6 +69,7 @@ export default function CheckoutStepperPage() {
   const [telefono, setTelefono] = useState('');
   const [indicaciones, setIndicaciones] = useState('');
   const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [gpsFailed, setGpsFailed] = useState(false);
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [mapInstance, setMapInstance] = useState<any>(null);
   const [markerInstance, setMarkerInstance] = useState<any>(null);
@@ -76,32 +77,42 @@ export default function CheckoutStepperPage() {
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      toast.error('Tu navegador no soporta geolocalización.');
+      toast.error('Tu navegador no soporta geolocalización. Entrada manual requerida.');
+      setGpsFailed(true);
       return;
     }
 
     toast.info('Obteniendo ubicación actual...');
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const newLat = position.coords.latitude;
-        const newLng = position.coords.longitude;
-        setCoords({
-          lat: newLat,
-          lng: newLng
-        });
-        toast.success('¡Ubicación obtenida con éxito!');
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLat = position.coords.latitude;
+          const newLng = position.coords.longitude;
+          setCoords({
+            lat: newLat,
+            lng: newLng
+          });
+          setGpsFailed(false);
+          toast.success('¡Ubicación satelital obtenida con éxito!');
 
-        if (mapInstance && markerInstance) {
-          mapInstance.setView([newLat, newLng], 16);
-          markerInstance.setLatLng([newLat, newLng]);
-        }
-      },
-      (error) => {
-        console.error('Error obteniendo ubicación:', error);
-        toast.error('No se pudo obtener tu ubicación. Por favor, actívala en tu navegador.');
-      },
-      { enableHighAccuracy: true }
-    );
+          if (mapInstance && markerInstance) {
+            mapInstance.setView([newLat, newLng], 16);
+            markerInstance.setLatLng([newLat, newLng]);
+          }
+        },
+        (error) => {
+          console.error('Error obteniendo ubicación:', error);
+          toast.error('Geolocalización denegada o no disponible. Activando entrada de dirección manual.');
+          setGpsFailed(true);
+          setCoords(null);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } catch (err) {
+      console.error('Exception in geolocation:', err);
+      setGpsFailed(true);
+      setCoords(null);
+    }
   };
 
   useEffect(() => {
@@ -522,13 +533,18 @@ export default function CheckoutStepperPage() {
 
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="dir" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Dirección completa *</Label>
+                          <Label htmlFor="dir" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                            {gpsFailed ? '🔴 Dirección Manual de Entrega (Obligatorio) *' : 'Dirección completa *'}
+                          </Label>
                           <Input
                             id="dir"
                             value={direccion}
                             onChange={e => setDireccion(e.target.value)}
-                            placeholder="Av. Arce, Edificio Multicentro, Nro. 1200"
-                            className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                            required
+                            placeholder={gpsFailed ? "Escriba detalladamente calle, número de puerta, edificio, zona..." : "Av. Arce, Edificio Multicentro, Nro. 1200"}
+                            className={`bg-white text-black placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                              gpsFailed ? 'border-red-400 focus-visible:ring-red-500 focus-visible:border-red-500 ring-1 ring-red-100' : 'border-gray-300'
+                            }`}
                           />
                         </div>
 
@@ -589,10 +605,19 @@ export default function CheckoutStepperPage() {
                             </Button>
                           </div>
 
-                          {coords === null ? (
-                            <div className="w-full h-64 bg-slate-100 rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-gray-300 text-gray-500 p-4 text-center">
-                              <Map className="w-8 h-8 text-gray-400 mb-2 animate-bounce" />
-                              <span className="text-xs font-bold text-slate-700">El mapa aparecerá aquí al obtener tu ubicación</span>
+                          {coords === null || gpsFailed ? (
+                            <div className="w-full h-64 bg-slate-100 rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-red-300 text-gray-500 p-6 text-center">
+                              <Map className="w-8 h-8 text-red-500 mb-2 animate-pulse" />
+                              <span className="text-xs font-bold text-slate-800 mb-1">
+                                {gpsFailed 
+                                  ? 'Acceso GPS Denegado o Fallido' 
+                                  : 'Ubicación GPS Requerida'}
+                              </span>
+                              <span className="text-[10px] text-slate-500 max-w-xs leading-relaxed font-medium">
+                                {gpsFailed 
+                                  ? 'La geolocalización satelital no está disponible. Por favor, asegúrese de ingresar su Dirección Manual de forma detallada arriba.' 
+                                  : 'Haga clic en el botón superior para obtener sus coordenadas de entrega exactas.'}
+                              </span>
                             </div>
                           ) : (
                             <div className="w-full h-64 mt-4 rounded-xl overflow-hidden border-2 border-gray-200 shadow-inner relative">

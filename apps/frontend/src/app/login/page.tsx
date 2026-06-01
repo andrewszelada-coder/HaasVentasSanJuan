@@ -62,7 +62,7 @@ export default function LoginPage() {
     const password = formData.get('password') as string;
     const birthDate = formData.get('birthDate') as string;
 
-    if (!nombres || !apellidos || !email || !password || !birthDate || !gender) {
+    if (!nombres || !apellidos || !email || !password) {
       setErrorMsg('Por favor complete todos los campos obligatorios (*).');
       return;
     }
@@ -75,8 +75,8 @@ export default function LoginPage() {
           data: {
             first_name: nombres,
             last_name: apellidos,
-            birth_date: birthDate,
-            gender: gender,
+            birth_date: birthDate || null,
+            gender: gender || 'Prefiero no decirlo',
             rol: 'cliente',
             sucursal: 'Central'
           }
@@ -84,7 +84,12 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setErrorMsg(error.message);
+        if (error.message.includes('already') || error.message.includes('duplicate') || error.status === 422) {
+          toast.error("Este correo ya está registrado. Por favor, inicia sesión.");
+          setErrorMsg("Este correo ya está registrado. Por favor, inicia sesión.");
+        } else {
+          setErrorMsg(error.message);
+        }
         return;
       }
 
@@ -430,13 +435,12 @@ export default function LoginPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="reg-birthdate" className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Fecha de Nacimiento *
+                        Fecha de Nacimiento (Opcional)
                       </Label>
                       <Input
                         id="reg-birthdate"
                         name="birthDate"
                         type="date"
-                        required
                         disabled={isRegisterPending}
                         className="border-slate-200 bg-white rounded-lg text-slate-900 placeholder:text-slate-400 focus-visible:ring-[#cc0000] focus-visible:border-[#cc0000] text-xs h-9"
                       />
@@ -444,11 +448,11 @@ export default function LoginPage() {
 
                     <div className="space-y-1.5">
                       <Label htmlFor="reg-gender" className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Género *
+                        Género (Opcional)
                       </Label>
                       <Select
                         value={gender}
-                        onValueChange={setGender}
+                        onValueChange={(val) => setGender(val || "Prefiero no decirlo")}
                         disabled={isRegisterPending}
                       >
                         <SelectTrigger

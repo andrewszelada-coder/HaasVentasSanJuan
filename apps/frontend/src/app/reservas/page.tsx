@@ -7,7 +7,7 @@ import { getPromociones, logoutAction } from '@/app/actions';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Flame, LogOut, ShoppingBag, Plus, Minus, Lock, Trash2, ArrowRight, FlameKindling, CalendarCheck, ShieldCheck } from 'lucide-react';
+import { Flame, LogOut, ShoppingBag, Plus, Minus, Lock, Trash2, ArrowRight, FlameKindling, CalendarCheck, ShieldCheck, User } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 
@@ -38,6 +38,11 @@ export default function ReservasPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Countdown to San Juan Night (June 23, 2026 20:00:00)
   useEffect(() => {
@@ -234,6 +239,7 @@ export default function ReservasPage() {
       localStorage.removeItem('haas_session_active');
       await supabase.auth.signOut();
       await logoutAction();
+      window.location.href = '/reservas';
     });
   };
 
@@ -305,7 +311,14 @@ export default function ReservasPage() {
                           )}
                         </div>
                         
-                        <div className="p-1">
+                        <div className="p-1 space-y-0.5">
+                          <Link href="/mi-cuenta">
+                            <span className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#cc0000] flex items-center gap-2 transition-colors cursor-pointer">
+                              <User className="w-3.5 h-3.5 text-slate-450" />
+                              Mi Cuenta
+                            </span>
+                          </Link>
+
                           <button
                             onClick={() => {
                               setDropdownOpen(false);
@@ -423,7 +436,8 @@ export default function ReservasPage() {
                           <Minus className="w-3.5 h-3.5" />
                         </button>
                         <input
-                          type="text"
+                          type="number"
+                          min="1"
                           value={quantities[promo.id] || 1}
                           onKeyDown={(e) => {
                             // Bloquear letras, decimales, negativos, etc.
@@ -432,7 +446,7 @@ export default function ReservasPage() {
                             }
                           }}
                           onChange={(e) => handleQuantityChange(promo.id, e.target.value, promo.stock_disponible)}
-                          className="w-12 text-center text-sm font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none"
+                          className="w-12 text-center text-sm font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <button
                           type="button"
@@ -506,12 +520,16 @@ export default function ReservasPage() {
                     <span className="font-black text-slate-900 uppercase tracking-wider text-xs">Resumen de Reserva</span>
                   </div>
                   <span className="text-[10px] font-bold bg-[#cc0000]/10 border border-[#cc0000]/15 text-[#cc0000] px-2.5 py-0.5 rounded-full font-mono">
-                    {cart.length} combos
+                    {mounted ? cart.length : 0} combos
                   </span>
                 </div>
 
                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
-                  {cart.length === 0 ? (
+                  {!mounted ? (
+                    <div className="text-center py-8 text-slate-400 text-xs font-mono font-medium">
+                      Cargando resumen...
+                    </div>
+                  ) : cart.length === 0 ? (
                     <div className="text-center py-8 text-slate-400 text-xs font-mono font-medium">
                       No has añadido combos a tu reserva todavía.
                     </div>
@@ -549,7 +567,8 @@ export default function ReservasPage() {
                             <Minus className="w-2.5 h-2.5" />
                           </button>
                           <input
-                            type="text"
+                            type="number"
+                            min="1"
                             value={item.cantidad}
                             onKeyDown={(e) => {
                               if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
@@ -560,7 +579,7 @@ export default function ReservasPage() {
                               const val = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 1;
                               handleUpdateCartQty(item.promotion.id, val, item.promotion.stock_disponible);
                             }}
-                            className="w-8 text-center text-[10px] font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none"
+                            className="w-8 text-center text-[10px] font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                           <button
                             type="button"
@@ -575,7 +594,7 @@ export default function ReservasPage() {
                   )}
                 </div>
 
-                {cart.length > 0 && (
+                {mounted && cart.length > 0 && (
                   <div className="pt-4 border-t border-slate-100 space-y-4">
                     <div className="flex justify-between items-baseline">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">Monto Total:</span>

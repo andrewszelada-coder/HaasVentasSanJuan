@@ -46,7 +46,7 @@ export async function loginAction(formData: FormData) {
 export async function logoutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect('/login');
+  redirect('/reservas');
 }
 
 // =========================================================================
@@ -213,7 +213,21 @@ export async function getPedidosCliente(userId: string) {
 
   const { data, error } = await supabase
     .from('pedidos')
-    .select('*')
+    .select(`
+      *,
+      pedido_items (
+        id,
+        cantidad,
+        subtotal_bs,
+        promociones_sanjuan (
+          id,
+          titulo,
+          precio_bs,
+          descripcion,
+          imagen_url
+        )
+      )
+    `)
     .eq('usuario_id', userId)
     .order('fecha_creacion', { ascending: false });
 
@@ -282,8 +296,18 @@ export async function crearPedidoAction(
     });
   }
 
-  // Calcular total restando descuento
-  const totalBs = Math.max(0, subtotalBs - financieroData.descuentoBs);
+  // 3. ZERO-TRUST DE DESCUENTOS Y CUPONES EN EL SERVIDOR
+  let serverDescuentoBs = 0;
+  if (financieroData.cuponAplicado) {
+    if (financieroData.cuponAplicado.toUpperCase() === 'SANJUAN10') {
+      serverDescuentoBs = subtotalBs * 0.10;
+    } else {
+      return { error: 'El cupón financiero aplicado no es válido en el servidor.' };
+    }
+  }
+
+  const finalDescuentoBs = serverDescuentoBs;
+  const totalBs = Math.max(0, subtotalBs - finalDescuentoBs);
 
   // Insertar pedido principal con datos de invitados y logística
   const { data: pedido, error: pedidoErr } = await supabase
@@ -306,7 +330,7 @@ export async function crearPedidoAction(
         indicaciones_entrega: logisticaData.indicaciones,
         // Finanzas
         cupon_aplicado: financieroData.cuponAplicado || null,
-        descuento_bs: financieroData.descuentoBs,
+        descuento_bs: finalDescuentoBs,
         metodo_pago: financieroData.metodoPago,
         // Observaciones y Fecha
         fecha_creacion: new Date().toISOString()
