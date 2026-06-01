@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+
 // =========================================================================
 // 1. AUTENTICACIÓN
 // =========================================================================
@@ -175,7 +176,6 @@ export async function eliminarPromoAction(id: string) {
 export async function getPedidos() {
   const supabase = await createClient();
 
-  // Obtener todos los pedidos con la información relacional completa
   const { data, error } = await supabase
     .from('pedidos')
     .select(`
@@ -250,7 +250,6 @@ export async function crearPedidoAction(
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 1. VALIDACIÓN DE STOCK (Condición Crítica QA)
   for (const item of items) {
     const { data: promo, error: promoErr } = await supabase
       .from('promociones_sanjuan')
@@ -273,7 +272,6 @@ export async function crearPedidoAction(
     }
   }
 
-  // 2. INSERCIÓN DE PEDIDO EN TRANSACCIÓN
   let subtotalBs = 0;
   const itemsConSubtotal = [];
 
@@ -293,7 +291,6 @@ export async function crearPedidoAction(
     });
   }
 
-  // 3. ZERO-TRUST DE DESCUENTOS Y CUPONES EN EL SERVIDOR
   let serverDescuentoBs = 0;
   if (financieroData.cuponAplicado) {
     if (financieroData.cuponAplicado.toUpperCase() === 'SANJUAN10') {
@@ -306,30 +303,25 @@ export async function crearPedidoAction(
   const finalDescuentoBs = serverDescuentoBs;
   const totalBs = Math.max(0, subtotalBs - finalDescuentoBs);
 
-  // Insertar pedido principal con datos de invitados y logística
   const { data: pedido, error: pedidoErr } = await supabase
     .from('pedidos')
     .insert([
       {
-        usuario_id: user?.id || null, // NULLABLE para Guest Checkout
+        usuario_id: user?.id || null,
         total_bs: totalBs,
         estado: 'pendiente',
-        // Facturación
         nombres_facturacion: billingData.nombres,
         tipo_documento: billingData.tipoDoc,
         numero_documento: billingData.numeroDoc,
-        // Logística
         tipo_ubicacion: logisticaData.tipoUbicacion,
         direccion_entrega: logisticaData.direccion,
         latitud: logisticaData.latitud,
         longitud: logisticaData.longitud,
         telefono_contacto: logisticaData.telefono,
         indicaciones_entrega: logisticaData.indicaciones,
-        // Finanzas
         cupon_aplicado: financieroData.cuponAplicado || null,
         descuento_bs: finalDescuentoBs,
         metodo_pago: financieroData.metodoPago,
-        // Observaciones y Fecha
         fecha_creacion: new Date().toISOString()
       }
     ])
@@ -340,7 +332,6 @@ export async function crearPedidoAction(
     return { error: `Error al registrar el pedido principal: ${pedidoErr?.message || 'No se pudo crear el registro.'}` };
   }
 
-  // Insertar ítems
   const itemsInsert = itemsConSubtotal.map(item => ({
     pedido_id: pedido.id,
     promo_id: item.promo_id,
@@ -351,12 +342,10 @@ export async function crearPedidoAction(
   const { error: itemsErr } = await supabase.from('pedido_items').insert(itemsInsert);
 
   if (itemsErr) {
-    // Si falla, intentamos limpiar el pedido creado
     await supabase.from('pedidos').delete().eq('id', pedido.id);
     return { error: `Error al registrar los combos de la reserva: ${itemsErr.message}` };
   }
 
-  // 3. REDUCCIÓN DE STOCK ATÓMICA AL CREAR
   for (const item of items) {
     const { error: updateStockErr } = await supabase.rpc('decrementar_stock', {
       promo_id: item.promoId,
@@ -403,7 +392,6 @@ export async function aprobarPedidoAction(pedidoId: string) {
 export async function cancelarPedidoAction(pedidoId: string) {
   const supabase = await createClient();
 
-  // Si cancelamos, idealmente devolvemos el stock
   const { data: items } = await supabase
     .from('pedido_items')
     .select('promo_id, cantidad')
@@ -457,8 +445,6 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
     return { success: true };
   }
 
-  // Manejo de Stock transaccional:
-  // 1. Si el pedido pasa de 'cancelado' a 'pendiente' o 'aprobado', se vuelve a reservar el stock
   if (estadoAnterior === 'cancelado' && nuevoEstado !== 'cancelado') {
     const { data: items } = await supabase
       .from('pedido_items')
@@ -489,7 +475,6 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
     }
   }
 
-  // 2. Si el pedido pasa de un estado activo ('pendiente' o 'aprobado') a 'cancelado', se restaura el stock
   if (nuevoEstado === 'cancelado' && estadoAnterior !== 'cancelado') {
     const { data: items } = await supabase
       .from('pedido_items')
@@ -514,7 +499,6 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
     }
   }
 
-  // Actualizar el estado en base de datos
   const { error: updateErr } = await supabase
     .from('pedidos')
     .update({ estado: nuevoEstado })
