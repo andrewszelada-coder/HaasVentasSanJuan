@@ -5,9 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 // =========================================================================
-// HELPER DE SANITIZACIÓN (recursivo y seguro)
+// HELPER DE SANITIZACIÓN (recursivo, constante y seguro)
 // =========================================================================
-function cleanData<T>(data: T): T {
+const clean = <T>(data: T): T => {
   if (data === null || data === undefined) {
     return data;
   }
@@ -15,19 +15,19 @@ function cleanData<T>(data: T): T {
     return (data as string).trim() as unknown as T;
   }
   if (Array.isArray(data)) {
-    return data.map(item => cleanData(item)) as unknown as T;
+    return data.map(item => clean(item)) as unknown as T;
   }
   if (typeof data === 'object') {
     const cleaned: any = {};
     for (const key in data) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {
-        cleaned[key] = cleanData((data as any)[key]);
+        cleaned[key] = clean((data as any)[key]);
       }
     }
     return cleaned as T;
   }
   return data;
-}
+};
 
 // =========================================================================
 // 1. AUTENTICACIÓN
@@ -37,14 +37,14 @@ export async function loginAction(formData: FormData) {
   let email = (formData.get('email') as string) || '';
   let password = (formData.get('password') as string) || '';
 
-  email = cleanData(email);
-  password = cleanData(password);
+  email = clean(email);
+  password = clean(password);
 
   if (!email || !password) {
     return { error: 'Por favor, ingrese correo electrónico y contraseña.' };
   }
 
-  // Validación de Email (Regex)
+  // Validación de Email (Regex de formato real)
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(email)) {
     return { error: 'El formato del correo electrónico ingresado no es válido.' };
@@ -111,7 +111,7 @@ export async function crearPromoAction(data: {
   categoria: string;
   tipo_venta: string;
 }) {
-  const cleaned = cleanData(data);
+  const cleaned = clean(data);
   const supabase = await createClient();
 
   const { error } = await supabase.from('promociones_sanjuan').insert([
@@ -145,8 +145,8 @@ export async function editarPromoAction(id: string, data: {
   categoria: string;
   tipo_venta: string;
 }) {
-  const cleanedId = cleanData(id);
-  const cleaned = cleanData(data);
+  const cleanedId = clean(id);
+  const cleaned = clean(data);
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -173,7 +173,7 @@ export async function editarPromoAction(id: string, data: {
 }
 
 export async function togglePromoActivoAction(id: string, activo: boolean) {
-  const cleanedId = cleanData(id);
+  const cleanedId = clean(id);
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -191,7 +191,7 @@ export async function togglePromoActivoAction(id: string, activo: boolean) {
 }
 
 export async function eliminarPromoAction(id: string) {
-  const cleanedId = cleanData(id);
+  const cleanedId = clean(id);
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -245,7 +245,7 @@ export async function getPedidos() {
 }
 
 export async function getPedidosCliente(userId: string) {
-  const cleanedUserId = cleanData(userId);
+  const cleanedUserId = clean(userId);
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -284,27 +284,34 @@ export async function crearPedidoAction(
   logisticaData: { tipoUbicacion: string; direccion: string; latitud: number; longitud: number; telefono: string; indicaciones: string },
   financieroData: { cuponAplicado: string; descuentoBs: number; metodoPago: string }
 ) {
-  // 1. Sanitización de datos de entrada
-  const cleanedSucursalDestino = cleanData(sucursalDestino);
-  const cleanedFechaRequerida = cleanData(fechaRequerida);
-  const cleanedObservaciones = cleanData(observaciones);
-  const cleanedItems = cleanData(items);
-  const cleanedBilling = cleanData(billingData);
-  const cleanedLogistica = cleanData(logisticaData);
-  const cleanedFinanciero = cleanData(financieroData);
+  // 1. Sanitización de datos de entrada mediante la constante clean
+  const cleanedSucursalDestino = clean(sucursalDestino);
+  const cleanedFechaRequerida = clean(fechaRequerida);
+  const cleanedObservaciones = clean(observaciones);
+  const cleanedItems = clean(items);
+  const cleanedBilling = clean(billingData);
+  const cleanedLogistica = clean(logisticaData);
+  const cleanedFinanciero = clean(financieroData);
 
-  // 2. Validaciones estrictas
-  // Teléfono (Bolivia): debe comenzar con 6 o 7 y tener exactamente 8 dígitos.
+  // 2. Validaciones estrictas de datos y reglas de negocio
+  
+  // Teléfono: Asegura que sea un string, que tenga exactamente 8 dígitos y que empiece por '6' o '7'
+  if (typeof cleanedLogistica.telefono !== 'string') {
+    return { error: 'El número de teléfono debe ser una cadena de texto (string).' };
+  }
   const boliviaPhoneRegex = /^[67]\d{7}$/;
   if (!boliviaPhoneRegex.test(cleanedLogistica.telefono)) {
     return { error: 'El número de teléfono de contacto debe comenzar con 6 o 7 y tener exactamente 8 dígitos.' };
   }
 
-  // NIT: debe contener solo números (0-9) si el tipo de documento es NIT.
+  // NIT: Asegura que solo contenga números y no caracteres especiales (en caso de que el tipo de documento sea NIT)
   if (cleanedBilling.tipoDoc.toUpperCase() === 'NIT') {
+    if (typeof cleanedBilling.numeroDoc !== 'string') {
+      return { error: 'El número de NIT debe ser una cadena de texto.' };
+    }
     const nitRegex = /^\d+$/;
-    if (!cleanedBilling.numeroDoc || !nitRegex.test(cleanedBilling.numeroDoc)) {
-      return { error: 'El número de NIT debe contener únicamente dígitos del 0 al 9.' };
+    if (!nitRegex.test(cleanedBilling.numeroDoc)) {
+      return { error: 'El número de NIT debe contener únicamente dígitos del 0 al 9 sin caracteres especiales.' };
     }
   }
 
@@ -438,7 +445,7 @@ export async function crearPedidoAction(
 }
 
 export async function aprobarPedidoAction(pedidoId: string) {
-  const cleanedId = cleanData(pedidoId);
+  const cleanedId = clean(pedidoId);
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -455,7 +462,7 @@ export async function aprobarPedidoAction(pedidoId: string) {
 }
 
 export async function cancelarPedidoAction(pedidoId: string) {
-  const cleanedId = cleanData(pedidoId);
+  const cleanedId = clean(pedidoId);
   const supabase = await createClient();
 
   const { data: items } = await supabase
@@ -494,8 +501,8 @@ export async function cancelarPedidoAction(pedidoId: string) {
 }
 
 export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado') {
-  const cleanedId = cleanData(pedidoId);
-  const cleanedEstado = cleanData(nuevoEstado);
+  const cleanedId = clean(pedidoId);
+  const cleanedEstado = clean(nuevoEstado);
   const supabase = await createClient();
 
   const { data: pedido, error: fetchErr } = await supabase
