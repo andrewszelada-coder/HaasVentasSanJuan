@@ -410,111 +410,216 @@ export default function AdminPedidosPage() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader className="bg-slate-50 border-b border-slate-100">
-                  <TableRow>
-                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">ID Pedido</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Cliente / NIT</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Sucursal</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Monto Total</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Estado</TableHead>
-                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Fecha</TableHead>
-                    <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedPedidos.map(pedido => (
-                    <TableRow key={pedido.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                      <TableCell className="font-mono text-[10px] text-slate-400 font-semibold">
-                        {pedido.id.substring(0, 8)}...
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <span className="block font-bold text-slate-900 text-xs">
-                            {pedido.nombres_facturacion || pedido.usuarios?.empresa || 'Consumidor Final'}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 font-mono font-semibold">
-                            Doc: {pedido.numero_documento || pedido.usuarios?.nit || 'S/N'}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-slate-600 text-xs font-mono font-bold">
-                        {pedido.usuarios?.sucursal || 'Central'}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs font-bold text-[#cc0000]">
-                        Bs. {Number(pedido.total_bs).toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline"
-                          className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
-                            pedido.estado === 'aprobado'
-                              ? 'bg-green-100 text-green-800 font-bold border border-green-300'
-                              : pedido.estado === 'cancelado'
-                              ? 'bg-red-100 text-red-800 font-bold border border-red-300'
-                              : 'bg-yellow-100 text-yellow-800 font-bold border border-yellow-300'
-                          }`}
-                        >
-                          {pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-400 font-mono text-[10px] font-semibold">
-                        {new Date(pedido.fecha_creacion).toLocaleDateString('es-BO', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          timeZone: 'America/La_Paz'
-                        })}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end items-center gap-3">
-                          {/* Botón Ver Detalle */}
-                          <Button
-                            onClick={() => {
-                              setSelectedPedido(pedido);
-                              setIsDetailOpen(true);
-                            }}
-                            className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-[11px] px-2.5 py-1 h-7 rounded-md font-semibold transition-colors flex items-center gap-1 shadow-sm"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
-                            Detalle
-                          </Button>
-
-                          {/* Selector de Estado Interactivo */}
-                          <div className="w-[125px] text-left">
-                            <Select 
-                              value={pedido.estado} 
-                              onValueChange={(value) => handleStatusChange(pedido.id, value as any)}
-                              disabled={isPending && actionId === pedido.id}
-                            >
-                              <SelectTrigger className="w-full h-7 text-[11px] font-bold border-slate-300 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-md cursor-pointer hover:bg-slate-50 transition-colors">
-                                <SelectValue placeholder="Cambiar estado" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
-                                <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
-                                  <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-yellow-800 border border-yellow-300">
-                                    Pendiente
-                                  </span>
-                                </SelectItem>
-                                <SelectItem value="aprobado" className="cursor-pointer text-gray-900 font-bold">
-                                  <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
-                                    Realizado
-                                  </span>
-                                </SelectItem>
-                                <SelectItem value="cancelado" className="cursor-pointer text-gray-900 font-bold">
-                                  <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-800 border border-red-300">
-                                    Rechazado
-                                  </span>
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      </TableCell>
+              {/* Vista Desktop: Tabla tradicional */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader className="bg-slate-50 border-b border-slate-100">
+                    <TableRow>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">ID Pedido</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Cliente / NIT</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Sucursal</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Monto Total</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Estado</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Fecha</TableHead>
+                      <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Acciones</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedPedidos.map(pedido => (
+                      <TableRow key={pedido.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                        <TableCell className="font-mono text-[10px] text-slate-400 font-semibold">
+                          {pedido.id.substring(0, 8)}...
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-0.5">
+                            <span className="block font-bold text-slate-900 text-xs">
+                              {pedido.nombres_facturacion || pedido.usuarios?.empresa || 'Consumidor Final'}
+                            </span>
+                            <span className="block text-[10px] text-slate-400 font-mono font-semibold">
+                              Doc: {pedido.numero_documento || pedido.usuarios?.nit || 'S/N'}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600 text-xs font-mono font-bold">
+                          {pedido.usuarios?.sucursal || 'Central'}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs font-bold text-[#cc0000]">
+                          Bs. {Number(pedido.total_bs).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline"
+                            className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
+                              pedido.estado === 'aprobado'
+                                ? 'bg-green-100 text-green-800 font-bold border border-green-300'
+                                : pedido.estado === 'cancelado'
+                                ? 'bg-red-100 text-red-800 font-bold border border-red-300'
+                                : 'bg-yellow-100 text-yellow-800 font-bold border border-yellow-300'
+                            }`}
+                          >
+                            {pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-400 font-mono text-[10px] font-semibold">
+                          {new Date(pedido.fecha_creacion).toLocaleDateString('es-BO', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            timeZone: 'America/La_Paz'
+                          })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end items-center gap-3">
+                            {/* Botón Ver Detalle */}
+                            <Button
+                              onClick={() => {
+                                setSelectedPedido(pedido);
+                                setIsDetailOpen(true);
+                              }}
+                              className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-[11px] px-2.5 py-1 h-7 rounded-md font-semibold transition-colors flex items-center gap-1 shadow-sm"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
+                              Detalle
+                            </Button>
+
+                            {/* Selector de Estado Interactivo */}
+                            <div className="w-[125px] text-left">
+                              <Select 
+                                value={pedido.estado} 
+                                onValueChange={(value) => handleStatusChange(pedido.id, value as any)}
+                                disabled={isPending && actionId === pedido.id}
+                              >
+                                <SelectTrigger className="w-full h-7 text-[11px] font-bold border-slate-300 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-md cursor-pointer hover:bg-slate-50 transition-colors">
+                                  <SelectValue placeholder="Cambiar estado" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
+                                  <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
+                                    <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-yellow-800 border border-yellow-300">
+                                      Pendiente
+                                    </span>
+                                  </SelectItem>
+                                  <SelectItem value="aprobado" className="cursor-pointer text-gray-900 font-bold">
+                                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
+                                      Realizado
+                                    </span>
+                                  </SelectItem>
+                                  <SelectItem value="cancelado" className="cursor-pointer text-gray-900 font-bold">
+                                    <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-800 border border-red-300">
+                                      Rechazado
+                                    </span>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Vista Móvil: Lista de Tarjetas (Cards) */}
+              <div className="block md:hidden space-y-4 p-4 bg-slate-50/30">
+                {paginatedPedidos.map(pedido => (
+                  <div key={pedido.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm relative space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-mono text-[10px] text-slate-400 font-bold">
+                        #{pedido.id.substring(0, 8)}...
+                      </span>
+                      <Badge 
+                        variant="outline"
+                        className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
+                          pedido.estado === 'aprobado'
+                            ? 'bg-green-100 text-green-800 font-bold border border-green-300'
+                            : pedido.estado === 'cancelado'
+                            ? 'bg-red-100 text-red-800 font-bold border border-red-300'
+                            : 'bg-yellow-100 text-yellow-800 font-bold border border-yellow-300'
+                        }`}
+                      >
+                        {pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="block font-black text-slate-900 text-sm">
+                        {pedido.nombres_facturacion || pedido.usuarios?.empresa || 'Consumidor Final'}
+                      </span>
+                      <span className="block text-[10px] text-slate-500 font-medium">
+                        Doc: <span className="font-mono font-semibold">{pedido.numero_documento || pedido.usuarios?.nit || 'S/N'}</span>
+                      </span>
+                      <span className="block text-[10px] text-slate-500 font-medium">
+                        Sucursal: <span className="font-bold text-slate-700">{pedido.usuarios?.sucursal || 'Central'}</span>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                      <div>
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider font-mono">Total Neto</span>
+                        <span className="font-mono text-sm font-black text-[#cc0000]">
+                          Bs. {Number(pedido.total_bs).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider font-mono">Fecha</span>
+                        <span className="text-slate-500 font-mono text-[10px] font-bold">
+                          {new Date(pedido.fecha_creacion).toLocaleDateString('es-BO', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: '2-digit',
+                            timeZone: 'America/La_Paz'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-2 border-t border-slate-100">
+                      {/* Botón Ver Detalle */}
+                      <Button
+                        onClick={() => {
+                          setSelectedPedido(pedido);
+                          setIsDetailOpen(true);
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-xs py-1.5 px-3 h-8 rounded-lg font-semibold transition-colors flex items-center justify-center gap-1 shadow-sm flex-1 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
+                        Ver Detalle
+                      </Button>
+
+                      {/* Selector de Estado */}
+                      <div className="w-[130px]">
+                        <Select 
+                          value={pedido.estado} 
+                          onValueChange={(value) => handleStatusChange(pedido.id, value as any)}
+                          disabled={isPending && actionId === pedido.id}
+                        >
+                          <SelectTrigger className="w-full h-8 text-[11px] font-bold border-slate-300 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                            <SelectValue placeholder="Estado" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
+                            <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
+                              <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-yellow-800 border border-yellow-300">
+                                Pendiente
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="aprobado" className="cursor-pointer text-gray-900 font-bold">
+                              <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
+                                Realizado
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="cancelado" className="cursor-pointer text-gray-900 font-bold">
+                              <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-800 border border-red-300">
+                                Rechazado
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
 
               {/* Pagination Controls */}
               {totalPages > 1 && (

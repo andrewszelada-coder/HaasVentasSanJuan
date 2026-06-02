@@ -5,15 +5,49 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 // =========================================================================
+// HELPER DE SANITIZACIÓN (recursivo y seguro)
+// =========================================================================
+function cleanData<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (typeof data === 'string') {
+    return (data as string).trim() as unknown as T;
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => cleanData(item)) as unknown as T;
+  }
+  if (typeof data === 'object') {
+    const cleaned: any = {};
+    for (const key in data) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        cleaned[key] = cleanData((data as any)[key]);
+      }
+    }
+    return cleaned as T;
+  }
+  return data;
+}
+
+// =========================================================================
 // 1. AUTENTICACIÓN
 // =========================================================================
 
 export async function loginAction(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
+  let email = (formData.get('email') as string) || '';
+  let password = (formData.get('password') as string) || '';
+
+  email = cleanData(email);
+  password = cleanData(password);
 
   if (!email || !password) {
     return { error: 'Por favor, ingrese correo electrónico y contraseña.' };
+  }
+
+  // Validación de Email (Regex)
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(email)) {
+    return { error: 'El formato del correo electrónico ingresado no es válido.' };
   }
 
   const supabase = await createClient();
@@ -77,18 +111,19 @@ export async function crearPromoAction(data: {
   categoria: string;
   tipo_venta: string;
 }) {
+  const cleaned = cleanData(data);
   const supabase = await createClient();
 
   const { error } = await supabase.from('promociones_sanjuan').insert([
     {
-      titulo: data.titulo,
-      descripcion: data.descripcion,
-      precio_bs: data.precio_bs,
+      titulo: cleaned.titulo,
+      descripcion: cleaned.descripcion,
+      precio_bs: cleaned.precio_bs,
       stock_disponible: 99999,
-      imagen_url: data.imagen_url || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=500',
-      activo: data.activo,
-      categoria: data.categoria || 'Combos San Juan',
-      tipo_venta: data.tipo_venta || 'Unidad/Paquete',
+      imagen_url: cleaned.imagen_url || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=500',
+      activo: cleaned.activo,
+      categoria: cleaned.categoria || 'Combos San Juan',
+      tipo_venta: cleaned.tipo_venta || 'Unidad/Paquete',
     },
   ]);
 
@@ -110,21 +145,23 @@ export async function editarPromoAction(id: string, data: {
   categoria: string;
   tipo_venta: string;
 }) {
+  const cleanedId = cleanData(id);
+  const cleaned = cleanData(data);
   const supabase = await createClient();
 
   const { error } = await supabase
     .from('promociones_sanjuan')
     .update({
-      titulo: data.titulo,
-      descripcion: data.descripcion,
-      precio_bs: data.precio_bs,
+      titulo: cleaned.titulo,
+      descripcion: cleaned.descripcion,
+      precio_bs: cleaned.precio_bs,
       stock_disponible: 99999,
-      imagen_url: data.imagen_url,
-      activo: data.activo,
-      categoria: data.categoria,
-      tipo_venta: data.tipo_venta,
+      imagen_url: cleaned.imagen_url,
+      activo: cleaned.activo,
+      categoria: cleaned.categoria,
+      tipo_venta: cleaned.tipo_venta,
     })
-    .eq('id', id);
+    .eq('id', cleanedId);
 
   if (error) {
     return { error: error.message };
@@ -136,12 +173,13 @@ export async function editarPromoAction(id: string, data: {
 }
 
 export async function togglePromoActivoAction(id: string, activo: boolean) {
+  const cleanedId = cleanData(id);
   const supabase = await createClient();
 
   const { error } = await supabase
     .from('promociones_sanjuan')
     .update({ activo })
-    .eq('id', id);
+    .eq('id', cleanedId);
 
   if (error) {
     return { error: error.message };
@@ -153,12 +191,13 @@ export async function togglePromoActivoAction(id: string, activo: boolean) {
 }
 
 export async function eliminarPromoAction(id: string) {
+  const cleanedId = cleanData(id);
   const supabase = await createClient();
 
   const { error } = await supabase
     .from('promociones_sanjuan')
     .delete()
-    .eq('id', id);
+    .eq('id', cleanedId);
 
   if (error) {
     return { error: error.message };
@@ -206,6 +245,7 @@ export async function getPedidos() {
 }
 
 export async function getPedidosCliente(userId: string) {
+  const cleanedUserId = cleanData(userId);
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -225,7 +265,7 @@ export async function getPedidosCliente(userId: string) {
         )
       )
     `)
-    .eq('usuario_id', userId)
+    .eq('usuario_id', cleanedUserId)
     .order('fecha_creacion', { ascending: false });
 
   if (error) {
@@ -244,13 +284,37 @@ export async function crearPedidoAction(
   logisticaData: { tipoUbicacion: string; direccion: string; latitud: number; longitud: number; telefono: string; indicaciones: string },
   financieroData: { cuponAplicado: string; descuentoBs: number; metodoPago: string }
 ) {
+  // 1. Sanitización de datos de entrada
+  const cleanedSucursalDestino = cleanData(sucursalDestino);
+  const cleanedFechaRequerida = cleanData(fechaRequerida);
+  const cleanedObservaciones = cleanData(observaciones);
+  const cleanedItems = cleanData(items);
+  const cleanedBilling = cleanData(billingData);
+  const cleanedLogistica = cleanData(logisticaData);
+  const cleanedFinanciero = cleanData(financieroData);
+
+  // 2. Validaciones estrictas
+  // Teléfono (Bolivia): debe comenzar con 6 o 7 y tener exactamente 8 dígitos.
+  const boliviaPhoneRegex = /^[67]\d{7}$/;
+  if (!boliviaPhoneRegex.test(cleanedLogistica.telefono)) {
+    return { error: 'El número de teléfono de contacto debe comenzar con 6 o 7 y tener exactamente 8 dígitos.' };
+  }
+
+  // NIT: debe contener solo números (0-9) si el tipo de documento es NIT.
+  if (cleanedBilling.tipoDoc.toUpperCase() === 'NIT') {
+    const nitRegex = /^\d+$/;
+    if (!cleanedBilling.numeroDoc || !nitRegex.test(cleanedBilling.numeroDoc)) {
+      return { error: 'El número de NIT debe contener únicamente dígitos del 0 al 9.' };
+    }
+  }
+
   const supabase = await createClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  for (const item of items) {
+  for (const item of cleanedItems) {
     const { data: promo, error: promoErr } = await supabase
       .from('promociones_sanjuan')
       .select('titulo, stock_disponible, activo')
@@ -275,7 +339,7 @@ export async function crearPedidoAction(
   let subtotalBs = 0;
   const itemsConSubtotal = [];
 
-  for (const item of items) {
+  for (const item of cleanedItems) {
     const { data: promo } = await supabase
       .from('promociones_sanjuan')
       .select('precio_bs')
@@ -292,8 +356,8 @@ export async function crearPedidoAction(
   }
 
   let serverDescuentoBs = 0;
-  if (financieroData.cuponAplicado) {
-    if (financieroData.cuponAplicado.toUpperCase() === 'SANJUAN10') {
+  if (cleanedFinanciero.cuponAplicado) {
+    if (cleanedFinanciero.cuponAplicado.toUpperCase() === 'SANJUAN10') {
       serverDescuentoBs = subtotalBs * 0.10;
     } else {
       return { error: 'El cupón financiero aplicado no es válido en el servidor.' };
@@ -310,18 +374,18 @@ export async function crearPedidoAction(
         usuario_id: user?.id || null,
         total_bs: totalBs,
         estado: 'pendiente',
-        nombres_facturacion: billingData.nombres,
-        tipo_documento: billingData.tipoDoc,
-        numero_documento: billingData.numeroDoc,
-        tipo_ubicacion: logisticaData.tipoUbicacion,
-        direccion_entrega: logisticaData.direccion,
-        latitud: logisticaData.latitud,
-        longitud: logisticaData.longitud,
-        telefono_contacto: logisticaData.telefono,
-        indicaciones_entrega: logisticaData.indicaciones,
-        cupon_aplicado: financieroData.cuponAplicado || null,
+        nombres_facturacion: cleanedBilling.nombres,
+        tipo_documento: cleanedBilling.tipoDoc,
+        numero_documento: cleanedBilling.numeroDoc,
+        tipo_ubicacion: cleanedLogistica.tipoUbicacion,
+        direccion_entrega: cleanedLogistica.direccion,
+        latitud: cleanedLogistica.latitud,
+        longitud: cleanedLogistica.longitud,
+        telefono_contacto: cleanedLogistica.telefono,
+        indicaciones_entrega: cleanedLogistica.indicaciones,
+        cupon_aplicado: cleanedFinanciero.cuponAplicado || null,
         descuento_bs: finalDescuentoBs,
-        metodo_pago: financieroData.metodoPago,
+        metodo_pago: cleanedFinanciero.metodoPago,
         fecha_creacion: new Date().toISOString()
       }
     ])
@@ -346,7 +410,7 @@ export async function crearPedidoAction(
     return { error: `Error al registrar los combos de la reserva: ${itemsErr.message}` };
   }
 
-  for (const item of items) {
+  for (const item of cleanedItems) {
     const { error: updateStockErr } = await supabase.rpc('decrementar_stock', {
       promo_id: item.promoId,
       cant: item.cantidad
@@ -374,12 +438,13 @@ export async function crearPedidoAction(
 }
 
 export async function aprobarPedidoAction(pedidoId: string) {
+  const cleanedId = cleanData(pedidoId);
   const supabase = await createClient();
 
   const { error } = await supabase
     .from('pedidos')
     .update({ estado: 'aprobado' })
-    .eq('id', pedidoId);
+    .eq('id', cleanedId);
 
   if (error) {
     return { error: error.message };
@@ -390,12 +455,13 @@ export async function aprobarPedidoAction(pedidoId: string) {
 }
 
 export async function cancelarPedidoAction(pedidoId: string) {
+  const cleanedId = cleanData(pedidoId);
   const supabase = await createClient();
 
   const { data: items } = await supabase
     .from('pedido_items')
     .select('promo_id, cantidad')
-    .eq('pedido_id', pedidoId);
+    .eq('pedido_id', cleanedId);
 
   if (items) {
     for (const item of items) {
@@ -417,7 +483,7 @@ export async function cancelarPedidoAction(pedidoId: string) {
   const { error } = await supabase
     .from('pedidos')
     .update({ estado: 'cancelado' })
-    .eq('id', pedidoId);
+    .eq('id', cleanedId);
 
   if (error) {
     return { error: error.message };
@@ -428,12 +494,14 @@ export async function cancelarPedidoAction(pedidoId: string) {
 }
 
 export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado') {
+  const cleanedId = cleanData(pedidoId);
+  const cleanedEstado = cleanData(nuevoEstado);
   const supabase = await createClient();
 
   const { data: pedido, error: fetchErr } = await supabase
     .from('pedidos')
     .select('estado')
-    .eq('id', pedidoId)
+    .eq('id', cleanedId)
     .single();
 
   if (fetchErr || !pedido) {
@@ -441,15 +509,15 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
   }
 
   const estadoAnterior = pedido.estado;
-  if (estadoAnterior === nuevoEstado) {
+  if (estadoAnterior === cleanedEstado) {
     return { success: true };
   }
 
-  if (estadoAnterior === 'cancelado' && nuevoEstado !== 'cancelado') {
+  if (estadoAnterior === 'cancelado' && cleanedEstado !== 'cancelado') {
     const { data: items } = await supabase
       .from('pedido_items')
       .select('promo_id, cantidad')
-      .eq('pedido_id', pedidoId);
+      .eq('pedido_id', cleanedId);
 
     if (items) {
       for (const item of items) {
@@ -475,11 +543,11 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
     }
   }
 
-  if (nuevoEstado === 'cancelado' && estadoAnterior !== 'cancelado') {
+  if (cleanedEstado === 'cancelado' && estadoAnterior !== 'cancelado') {
     const { data: items } = await supabase
       .from('pedido_items')
       .select('promo_id, cantidad')
-      .eq('pedido_id', pedidoId);
+      .eq('pedido_id', cleanedId);
 
     if (items) {
       for (const item of items) {
@@ -501,8 +569,8 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
 
   const { error: updateErr } = await supabase
     .from('pedidos')
-    .update({ estado: nuevoEstado })
-    .eq('id', pedidoId);
+    .update({ estado: cleanedEstado })
+    .eq('id', cleanedId);
 
   if (updateErr) {
     return { error: updateErr.message };
