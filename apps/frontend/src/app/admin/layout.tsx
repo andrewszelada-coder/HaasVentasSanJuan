@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions';
-import { ClipboardList, PackagePlus, ArrowLeft, LogOut, Loader2, Menu, X } from 'lucide-react';
+import { ClipboardList, PackagePlus, ArrowLeft, LogOut, Loader2, Menu, X, History } from 'lucide-react';
 
 export default function AdminLayout({
   children,
@@ -21,6 +21,11 @@ export default function AdminLayout({
       name: 'Gestión Reservas',
       href: '/admin/pedidos',
       icon: <ClipboardList className="w-4 h-4" />
+    },
+    {
+      name: 'Historial Reservas',
+      href: '/admin/historial',
+      icon: <History className="w-4 h-4" />
     },
     {
       name: 'Gestión Promos',

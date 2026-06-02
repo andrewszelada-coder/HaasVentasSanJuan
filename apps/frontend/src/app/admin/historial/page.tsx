@@ -8,10 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
+import { Label } from '@/components/ui/label';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ClipboardList, TrendingUp, Anchor, CheckCircle2, XCircle, 
-  Loader2, Eye, FileSpreadsheet, MapPin, Receipt, Phone, Info
+  History, TrendingUp, CheckCircle2, XCircle, 
+  Loader2, Eye, FileSpreadsheet, MapPin, Receipt, Phone, Info, Calendar
 } from 'lucide-react';
 import {
   Select,
@@ -57,13 +58,17 @@ interface Pedido {
   pedido_items?: PedidoItem[];
 }
 
-export default function AdminPedidosPage() {
+export default function AdminHistorialPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [actionId, setActionId] = useState<string | null>(null);
+
+  // Estados de Rango de Fechas (Por defecto desde hace 30 días hasta hoy)
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
@@ -72,23 +77,37 @@ export default function AdminPedidosPage() {
 
   useEffect(() => {
     setIsMounted(true);
+    // Establecer fechas iniciales por defecto (Bolivia Time)
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/La_Paz' });
+    
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 30);
+    const thirtyDaysAgo = pastDate.toLocaleDateString('sv-SE', { timeZone: 'America/La_Paz' });
+
+    setDesde(thirtyDaysAgo);
+    setHasta(today);
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (filterDesde: string, filterHasta: string) => {
+    setLoading(true);
     try {
-      const data = await getPedidos(true);
+      // getPedidos(soloHoy = false, desde, hasta)
+      const data = await getPedidos(false, filterDesde, filterHasta);
       setPedidos(data as any[]);
       setCurrentPage(1);
     } catch (err) {
-      toast.error("Error al cargar los pedidos del Backoffice.");
+      toast.error("Error al cargar el historial de pedidos.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Carga inicial y recarga reactiva ante cambios en los selectores
   useEffect(() => {
-    loadData();
-  }, []);
+    if (desde && hasta) {
+      loadData(desde, hasta);
+    }
+  }, [desde, hasta]);
 
   const handleStatusChange = (id: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado') => {
     setActionId(id);
@@ -101,10 +120,9 @@ export default function AdminPedidosPage() {
           const readableState = nuevoEstado === 'aprobado' ? 'Realizado' : nuevoEstado === 'cancelado' ? 'Rechazado' : 'Pendiente';
           toast.success(`Estado de la reserva cambiado a "${readableState}" con éxito.`);
           
-          // Actualización de estado local reactivo inmediato (BUG 1)
+          // Actualización de estado local reactivo inmediato
           setPedidos(prevPedidos => prevPedidos.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p));
           
-          // Si el modal de detalles está abierto para este mismo pedido, actualizar la vista
           if (selectedPedido && selectedPedido.id === id) {
             setSelectedPedido(prev => prev ? { ...prev, estado: nuevoEstado } : null);
           }
@@ -125,7 +143,7 @@ export default function AdminPedidosPage() {
         toast.error(result.error);
       } else {
         toast.success("Reserva aprobada y marcada como Realizada con éxito.");
-        await loadData();
+        await loadData(desde, hasta);
         setIsDetailOpen(false);
       }
       setActionId(null);
@@ -140,17 +158,17 @@ export default function AdminPedidosPage() {
         toast.error(result.error);
       } else {
         toast.info("Reserva rechazada (cancelada) y stock devuelto.");
-        await loadData();
+        await loadData(desde, hasta);
         setIsDetailOpen(false);
       }
       setActionId(null);
     });
   };
 
-  // Función de Exportación a Excel (HTML XML con Formato Corporativo)
+  // Función de Exportación a Excel de Datos Filtrados
   const exportToExcel = () => {
     if (pedidos.length === 0) {
-      toast.error("No hay pedidos registrados para exportar.");
+      toast.error("No hay pedidos en el rango seleccionado para exportar.");
       return;
     }
 
@@ -195,7 +213,7 @@ export default function AdminPedidosPage() {
         <x:ExcelWorkbook>
           <x:ExcelWorksheets>
             <x:ExcelWorksheet>
-              <x:Name>Reservas Haas San Juan</x:Name>
+              <x:Name>Historial Reservas Haas</x:Name>
               <x:WorksheetOptions>
                 <x:DisplayGridlines/>
               </x:WorksheetOptions>
@@ -221,8 +239,8 @@ export default function AdminPedidosPage() {
         <table class="header-table" style="border: none;">
           <tr>
             <td colspan="5" style="border: none; padding: 0;">
-              <div class="header-title">INDUSTRIAS HAAS - REPORTE DE RESERVAS DE VENTAS</div>
-              <div class="header-meta">Campaña San Juan 2026 | Generado: ${new Date().toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}</div>
+              <div class="header-title">INDUSTRIAS HAAS - REPORTE COMERCIAL DE HISTORIAL DE RESERVAS</div>
+              <div class="header-meta">Rango: Desde ${desde} Hasta ${hasta} | Generado: ${new Date().toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}</div>
             </td>
           </tr>
         </table>
@@ -253,7 +271,7 @@ export default function AdminPedidosPage() {
           <tbody>
             ${rowsHtml}
             <tr style="font-weight: bold;">
-              <td colspan="15" class="total-label" style="background-color: #f2f2f2;">Total Ventas Consolidadas (sin cancelados):</td>
+              <td colspan="15" class="total-label" style="background-color: #f2f2f2;">Total Historial Consolidado (sin cancelados):</td>
               <td class="total-val">Bs. ${totalVentasHtml}</td>
               <td colspan="3" style="background-color: #f2f2f2;"></td>
             </tr>
@@ -267,23 +285,18 @@ export default function AdminPedidosPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    const laPazDateStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/La_Paz' }); // sv-SE outputs YYYY-MM-DD
-    link.setAttribute("download", `reservas_haas_sanjuan_${laPazDateStr}.xls`);
+    link.setAttribute("download", `historial_reservas_haas_${desde}_a_${hasta}.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    toast.success("¡Reporte de Ventas en Excel generado con éxito!");
+    toast.success("¡Historial en Excel generado y descargado con éxito!");
   };
 
+  // KPIs REACTIVOS BASADOS EN LOS RESULTADOS FILTRADOS
   const totalReservas = pedidos.length;
   const ventasProyectadas = pedidos.reduce((sum, p) => p.estado !== 'cancelado' ? sum + Number(p.total_bs) : sum, 0);
-  
-  const totalPages = Math.ceil(pedidos.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedPedidos = pedidos.slice(startIndex, startIndex + itemsPerPage);
-  
-  // Cálculo dinámico para modelo de inventario mixto (Granel Kg vs Combos Unidades)
+
   let granelKg = 0;
   let paquetesUnid = 0;
 
@@ -291,7 +304,6 @@ export default function AdminPedidosPage() {
     if (p.estado !== 'cancelado') {
       p.pedido_items?.forEach(item => {
         const titulo = (item.promociones_sanjuan?.titulo || '').toLowerCase();
-        // Clasificamos como granel si el título incluye 'granel' o 'kg'
         if (titulo.includes('granel') || titulo.includes('kg')) {
           granelKg += item.cantidad;
         } else {
@@ -301,49 +313,101 @@ export default function AdminPedidosPage() {
     }
   });
 
-  // Fallback visual interactivo si no hay ítems sembrados de tipo granel en la BD de prueba
+  // Fallbacks proporcionales para KPI
   if (granelKg === 0 && pedidos.length > 0) {
-    granelKg = pedidos.length * 6.5; // Estimación proporcional de kilos asignados a granel
+    granelKg = pedidos.length * 6.5;
   }
   if (paquetesUnid === 0 && pedidos.length > 0) {
     paquetesUnid = pedidos.reduce((acc, p) => acc + (p.pedido_items?.reduce((sum, i) => sum + i.cantidad, 0) || 0), 0) || (pedidos.length * 2);
   }
 
+  const totalPages = Math.ceil(pedidos.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPedidos = pedidos.slice(startIndex, startIndex + itemsPerPage);
+
   if (!isMounted) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center select-none font-sans">
         <Loader2 className="w-8 h-8 animate-spin text-[#cc0000] mb-2" />
-        <span className="text-xs font-bold text-slate-800 tracking-wide uppercase font-mono">Cargando Dashboard Haas...</span>
+        <span className="text-xs font-bold text-slate-800 tracking-wide uppercase font-mono">Cargando Historial...</span>
       </div>
     );
   }
 
   return (
     <div className="space-y-8 bg-slate-50 text-slate-900 p-6 rounded-3xl min-h-screen border border-slate-200 shadow-sm font-sans selection:bg-[#cc0000] selection:text-white">
-      {/* Page Title & Toolbar */}
+      
+      {/* Title & Toolbar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-5 border-b border-slate-200">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-            <ClipboardList className="w-6 h-6 text-[#cc0000] animate-pulse" />
-            Dashboard Operativo (Hoy)
+            <History className="w-6 h-6 text-[#cc0000]" />
+            Historial General de Reservas
           </h1>
-          <p className="text-slate-500 text-xs mt-1 font-medium">Consolide, verifique y gestione las reservas de la fecha actual.</p>
+          <p className="text-slate-500 text-xs mt-1 font-medium">Consulte, filtre por rango de fechas y descargue el reporte comercial de reservas.</p>
         </div>
+
+        <Button
+          onClick={exportToExcel}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-wider text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 transition-all duration-300 hover:scale-[1.01] active:scale-95 shadow-md shadow-emerald-700/10 cursor-pointer"
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          Descargar Excel Filtrado
+        </Button>
       </div>
 
-      {/* KPI Section */}
+      {/* Date Selectors Section */}
+      <Card className="border border-slate-200 bg-white rounded-3xl p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="space-y-1.5 flex-1 w-full">
+            <Label htmlFor="desde" className="text-xs font-bold text-slate-500 uppercase tracking-widest block flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-[#cc0000]" /> Fecha Desde
+            </Label>
+            <input
+              type="date"
+              id="desde"
+              value={desde}
+              onChange={e => setDesde(e.target.value)}
+              className="w-full bg-white text-slate-900 border border-slate-200 rounded-xl p-2.5 text-xs focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none shadow-inner"
+            />
+          </div>
+
+          <div className="space-y-1.5 flex-1 w-full">
+            <Label htmlFor="hasta" className="text-xs font-bold text-slate-500 uppercase tracking-widest block flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-[#cc0000]" /> Fecha Hasta
+            </Label>
+            <input
+              type="date"
+              id="hasta"
+              value={hasta}
+              onChange={e => setHasta(e.target.value)}
+              className="w-full bg-white text-slate-900 border border-slate-200 rounded-xl p-2.5 text-xs focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none shadow-inner"
+            />
+          </div>
+
+          <Button
+            onClick={() => loadData(desde, hasta)}
+            disabled={loading}
+            className="bg-slate-900 hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs py-3 px-5 rounded-xl h-10 shadow-sm cursor-pointer select-none active:scale-95 shrink-0"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Refrescar'}
+          </Button>
+        </div>
+      </Card>
+
+      {/* KPI Section Reactivo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Card 1: Total Reservas */}
         <Card className="border border-slate-200/80 bg-white rounded-3xl shadow-sm overflow-hidden relative transition-all hover:shadow-md">
           <div className="h-[3px] bg-[#cc0000] absolute top-0 left-0 right-0" />
           <CardContent className="p-6 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Reservas</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Reservas (Filtro)</span>
               <span className="block text-2xl font-extrabold font-mono text-slate-900 leading-none mt-1">{totalReservas}</span>
-              <span className="block text-[10px] text-slate-500 mt-1 font-medium">Pedidos registrados en el portal</span>
+              <span className="block text-[10px] text-slate-500 mt-1 font-medium">Pedidos dentro del rango de fecha</span>
             </div>
             <div className="w-12 h-12 bg-slate-50 border border-slate-100 flex items-center justify-center rounded-2xl shadow-inner">
-              <ClipboardList className="w-5 h-5 text-[#cc0000]" />
+              <History className="w-5 h-5 text-[#cc0000]" />
             </div>
           </CardContent>
         </Card>
@@ -353,9 +417,9 @@ export default function AdminPedidosPage() {
           <div className="h-[3px] bg-[#cc0000] absolute top-0 left-0 right-0" />
           <CardContent className="p-6 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ventas Proyectadas</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ventas Proyectadas (Filtro)</span>
               <span className="block text-2xl font-extrabold font-mono text-slate-900 leading-none mt-1">Bs. {ventasProyectadas.toFixed(2)}</span>
-              <span className="block text-[10px] text-slate-500 mt-1 font-medium">Pedidos aprobados y pendientes</span>
+              <span className="block text-[10px] text-slate-500 mt-1 font-medium">Aprobados y pendientes en este rango</span>
             </div>
             <div className="w-12 h-12 bg-slate-50 border border-slate-100 flex items-center justify-center rounded-2xl shadow-inner">
               <TrendingUp className="w-5 h-5 text-emerald-600" />
@@ -363,12 +427,12 @@ export default function AdminPedidosPage() {
           </CardContent>
         </Card>
 
-        {/* Card 3: Volumen de Despacho (Modelo Mixto) */}
+        {/* Card 3: Volumen de Despacho */}
         <Card className="border border-slate-200/80 bg-white rounded-3xl shadow-sm overflow-hidden relative transition-all hover:shadow-md">
           <div className="h-[3px] bg-[#cc0000] absolute top-0 left-0 right-0" />
           <CardContent className="p-6 flex flex-col justify-between h-full">
             <div className="space-y-1 w-full">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Volumen de Despacho</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Volumen Despacho (Filtro)</span>
               
               <div className="flex flex-row justify-between items-center gap-4 mt-2 pt-1 border-t border-slate-100">
                 <div className="space-y-0.5">
@@ -381,14 +445,14 @@ export default function AdminPedidosPage() {
                   <span className="block text-xl font-extrabold font-mono text-slate-800">{paquetesUnid} Unid</span>
                 </div>
               </div>
-              <span className="block text-[10px] text-slate-500 mt-2 font-medium">Volumen consolidado de inventario mixto</span>
+              <span className="block text-[10px] text-slate-500 mt-2 font-medium">Volumen consolidado filtrado</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Data Table */}
-      <Card className="border border-slate-200/80 bg-white rounded-3xl overflow-hidden shadow-sm relative transition-all">
+      {/* General Data Table */}
+      <Card className="border border-slate-200/80 bg-white rounded-3xl overflow-hidden shadow-sm relative">
         <div className="h-[3px] bg-[#cc0000] absolute top-0 left-0 right-0" />
         <CardContent className="p-0">
           {loading ? (
@@ -397,12 +461,12 @@ export default function AdminPedidosPage() {
               <div className="h-4 bg-slate-50 rounded w-1/2 mx-auto" />
             </div>
           ) : pedidos.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 font-mono text-xs font-bold">
-              No hay registros de reservas en el sistema comercial.
+            <div className="p-12 text-center text-slate-400 font-mono text-xs font-bold select-none">
+              No se encontraron reservas en el rango de fechas seleccionado.
             </div>
           ) : (
             <>
-              {/* Vista Desktop: Tabla tradicional */}
+              {/* Desktop Table View */}
               <div className="hidden md:block">
                 <Table>
                   <TableHeader className="bg-slate-50 border-b border-slate-100">
@@ -462,19 +526,17 @@ export default function AdminPedidosPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end items-center gap-3">
-                            {/* Botón Ver Detalle */}
                             <Button
                               onClick={() => {
                                 setSelectedPedido(pedido);
                                 setIsDetailOpen(true);
                               }}
-                              className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-[11px] px-2.5 py-1 h-7 rounded-md font-semibold transition-colors flex items-center gap-1 shadow-sm"
+                              className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 text-[11px] px-2.5 py-1 h-7 rounded-md font-semibold transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
                             >
                               <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
                               Detalle
                             </Button>
 
-                            {/* Selector de Estado Interactivo */}
                             <div className="w-[125px] text-left">
                               <Select 
                                 value={pedido.estado} 
@@ -482,7 +544,7 @@ export default function AdminPedidosPage() {
                                 disabled={isPending && actionId === pedido.id}
                               >
                                 <SelectTrigger className="w-full h-7 text-[11px] font-bold border-slate-300 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-md cursor-pointer hover:bg-slate-50 transition-colors">
-                                  <SelectValue placeholder="Cambiar estado" />
+                                  <SelectValue placeholder="Estado" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
                                   <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
@@ -511,7 +573,7 @@ export default function AdminPedidosPage() {
                 </Table>
               </div>
 
-              {/* Vista Móvil: Lista de Tarjetas (Cards) */}
+              {/* Mobile Card View */}
               <div className="block md:hidden space-y-4 p-4 bg-slate-50/30">
                 {paginatedPedidos.map(pedido => (
                   <div key={pedido.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm relative space-y-3">
@@ -566,7 +628,6 @@ export default function AdminPedidosPage() {
                     </div>
 
                     <div className="flex gap-2 pt-2 border-t border-slate-100">
-                      {/* Botón Ver Detalle */}
                       <Button
                         onClick={() => {
                           setSelectedPedido(pedido);
@@ -578,7 +639,6 @@ export default function AdminPedidosPage() {
                         Ver Detalle
                       </Button>
 
-                      {/* Selector de Estado */}
                       <div className="w-[130px]">
                         <Select 
                           value={pedido.estado} 
@@ -612,10 +672,9 @@ export default function AdminPedidosPage() {
                 ))}
               </div>
 
-
               {/* Pagination Controls */}
               {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t border-slate-200 bg-slate-50/50 animate-fade-in">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t border-slate-200 bg-slate-50/50">
                   <span className="text-xs text-slate-500 font-semibold">
                     Mostrando <span className="font-bold text-slate-900">{startIndex + 1}</span> a{' '}
                     <span className="font-bold text-slate-900">{Math.min(startIndex + itemsPerPage, pedidos.length)}</span> de{' '}
@@ -671,13 +730,13 @@ export default function AdminPedidosPage() {
         </CardContent>
       </Card>
 
-      {/* Expandable Order Detail Modal Popup - GRAND ESQUEMA max-w-5xl (Espacioso y Moderno) */}
+      {/* Expandable Order Detail Modal Popup */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl w-11/12 bg-white border border-slate-200 text-slate-900 rounded-3xl p-8 shadow-2xl overflow-y-auto max-h-[90vh]">
           {selectedPedido && (
             <>
               <DialogHeader className="border-b border-slate-150 pb-5">
-                <DialogTitle className="text-xl font-black uppercase text-slate-950 flex items-center gap-2 tracking-wide leading-none">
+                <DialogTitle className="text-xl font-black uppercase text-slate-955 flex items-center gap-2 tracking-wide leading-none">
                   <Info className="w-6 h-6 text-[#cc0000]" />
                   Detalle del Pedido: #{selectedPedido.id.substring(0, 8)}
                 </DialogTitle>
@@ -688,12 +747,12 @@ export default function AdminPedidosPage() {
 
               <div className="space-y-8 mt-6">
                 
-                {/* 1. Cliente & Facturación + Logística lado a lado (Grid de 2 columnas) */}
+                {/* billing + logistics side-by-side */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Datos del Cliente y Facturación */}
                   <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-6 md:p-8 space-y-4 shadow-inner flex flex-col justify-between">
                     <div>
-                      <span className="font-extrabold text-xs md:text-sm text-slate-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                      <span className="font-extrabold text-xs md:text-sm text-slate-50 text-slate-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-200 pb-2">
                         <Receipt className="w-4.5 h-4.5 text-[#cc0000]" /> Datos Tributarios y Facturación
                       </span>
                       <div className="space-y-3 mt-4 font-semibold text-sm">
@@ -741,7 +800,7 @@ export default function AdminPedidosPage() {
                     </div>
                   </div>
 
-                  {/* Datos de Logística y Mapa Satelital */}
+                  {/* Datos de Logística y Mapa */}
                   <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-6 md:p-8 space-y-4 shadow-inner flex flex-col justify-between">
                     <div>
                       <span className="font-extrabold text-xs md:text-sm text-slate-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-200 pb-2">
@@ -786,7 +845,7 @@ export default function AdminPedidosPage() {
                   </div>
                 </div>
 
-                {/* 2. Combos Solicitados - Tabla Gigante */}
+                {/* Combos Solicitados */}
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-4 shadow-sm">
                   <span className="font-extrabold text-xs md:text-sm text-slate-500 uppercase tracking-widest border-b border-slate-100 pb-2 block font-mono">
                     Productos Solicitados (Desglose de Combos)
@@ -859,4 +918,3 @@ export default function AdminPedidosPage() {
     </div>
   );
 }
-

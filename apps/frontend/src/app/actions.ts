@@ -212,10 +212,10 @@ export async function eliminarPromoAction(id: string) {
 // 3. PEDIDOS (RESERVAS)
 // =========================================================================
 
-export async function getPedidos() {
+export async function getPedidos(soloHoy = false, desde?: string, hasta?: string) {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('pedidos')
     .select(`
       *,
@@ -234,8 +234,25 @@ export async function getPedidos() {
           precio_bs
         )
       )
-    `)
-    .order('fecha_creacion', { ascending: false });
+    `);
+
+  if (soloHoy) {
+    const laPazDate = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/La_Paz' });
+    const startOfDay = `${laPazDate}T00:00:00.000-04:00`;
+    const endOfDay = `${laPazDate}T23:59:59.999-04:00`;
+    query = query.gte('fecha_creacion', startOfDay).lte('fecha_creacion', endOfDay);
+  } else {
+    if (desde) {
+      const startOfDesde = `${desde}T00:00:00.000-04:00`;
+      query = query.gte('fecha_creacion', startOfDesde);
+    }
+    if (hasta) {
+      const endOfHasta = `${hasta}T23:59:59.999-04:00`;
+      query = query.lte('fecha_creacion', endOfHasta);
+    }
+  }
+
+  const { data, error } = await query.order('fecha_creacion', { ascending: false });
 
   if (error) {
     throw new Error(`Error al obtener pedidos: ${error.message}`);

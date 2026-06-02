@@ -45,26 +45,12 @@ export default function CheckoutStepperPage() {
   const [tipoDocumento, setTipoDocumento] = useState('NIT');
   const [numeroDocumento, setNumeroDocumento] = useState('');
 
+  // --- ESTADOS CONDICIONALES ADICIONALES (CI, NIT, Carnet Extranjero) ---
+  const [complemento, setComplemento] = useState('');
+  const [paisOrigen, setPaisOrigen] = useState('');
+
   // Paso 2: Logística y Entrega
   const [direccion, setDireccion] = useState('');
-
-  useEffect(() => {
-    async function checkAuth() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setHasSession(true);
-        setNombres(user.user_metadata?.nombres || '');
-        setApellidos(user.user_metadata?.apellidos || '');
-        setEmail(user.email || '');
-        setNumeroDocumento(user.user_metadata?.nit || '');
-        setRazonSocial(user.user_metadata?.empresa || '');
-        setTipoDocumento('NIT');
-      } else {
-        setHasSession(false);
-      }
-    }
-    checkAuth();
-  }, []);
   const [tipoUbicacion, setTipoUbicacion] = useState('Casa');
   const [telefono, setTelefono] = useState('');
   const [indicaciones, setIndicaciones] = useState('');
@@ -74,6 +60,143 @@ export default function CheckoutStepperPage() {
   const [mapInstance, setMapInstance] = useState<any>(null);
   const [markerInstance, setMarkerInstance] = useState<any>(null);
   const mapRef = React.useRef<HTMLDivElement>(null);
+
+  // --- ESTADOS LOCALES PARA VALIDACIONES EN TIEMPO REAL (UX Inline) ---
+  const [errorNombres, setErrorNombres] = useState('');
+  const [errorApellidos, setErrorApellidos] = useState('');
+  const [errorEmail, setErrorEmail] = useState('');
+  const [errorNit, setErrorNit] = useState('');
+  const [errorPaisOrigen, setErrorPaisOrigen] = useState('');
+  const [errorDireccion, setErrorDireccion] = useState('');
+  const [errorTelefono, setErrorTelefono] = useState('');
+
+  // --- FUNCIONES DE VALIDACIÓN ---
+  const validateNombres = (val: string) => {
+    if (!val.trim()) {
+      setErrorNombres('El nombre es obligatorio.');
+      return false;
+    }
+    setErrorNombres('');
+    return true;
+  };
+
+  const validateApellidos = (val: string) => {
+    if (!val.trim()) {
+      setErrorApellidos('El apellido es obligatorio.');
+      return false;
+    }
+    setErrorApellidos('');
+    return true;
+  };
+
+  const validateEmail = (val: string) => {
+    if (!val) {
+      setErrorEmail('El correo electrónico es obligatorio.');
+      return false;
+    }
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(val)) {
+      setErrorEmail('El formato del correo electrónico ingresado no es válido.');
+      return false;
+    }
+    setErrorEmail('');
+    return true;
+  };
+
+  const validateNit = (val: string, typeDoc: string) => {
+    if (!val) {
+      setErrorNit('El número de documento es obligatorio.');
+      return false;
+    }
+    if (typeDoc.toUpperCase() === 'NIT') {
+      const nitRegex = /^\d+$/;
+      if (!nitRegex.test(val)) {
+        setErrorNit('El número de NIT debe contener únicamente dígitos del 0 al 9 sin caracteres especiales.');
+        return false;
+      }
+    }
+    setErrorNit('');
+    return true;
+  };
+
+  const validatePaisOrigen = (val: string, typeDoc: string) => {
+    if (typeDoc === 'Carnet Extranjero' && !val.trim()) {
+      setErrorPaisOrigen('El país de origen es obligatorio para extranjeros.');
+      return false;
+    }
+    setErrorPaisOrigen('');
+    return true;
+  };
+
+  const validateDireccion = (val: string) => {
+    if (!val.trim()) {
+      setErrorDireccion('La dirección de entrega es obligatoria.');
+      return false;
+    }
+    setErrorDireccion('');
+    return true;
+  };
+
+  const validateTelefono = (val: string) => {
+    if (!val) {
+      setErrorTelefono('El teléfono es obligatorio.');
+      return false;
+    }
+    const boliviaPhoneRegex = /^[67]\d{7}$/;
+    if (!boliviaPhoneRegex.test(val)) {
+      setErrorTelefono('El número de teléfono de contacto debe comenzar con 6 o 7 y tener exactamente 8 dígitos.');
+      return false;
+    }
+    setErrorTelefono('');
+    return true;
+  };
+
+  // Función para resetear campos al cambiar tipo de documento (conmutación segura)
+  const handleTipoDocumentoChange = (newVal: string) => {
+    setTipoDocumento(newVal);
+    setNumeroDocumento('');
+    setRazonSocial('');
+    setComplemento('');
+    setPaisOrigen('');
+    setErrorNit('');
+    setErrorPaisOrigen('');
+  };
+
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setHasSession(true);
+        const nameVal = user.user_metadata?.nombres || '';
+        const lastNameVal = user.user_metadata?.apellidos || '';
+        const emailVal = user.email || '';
+        const docTypeVal = user.user_metadata?.tipo_documento || 'NIT';
+        const nitVal = user.user_metadata?.numero_documento || user.user_metadata?.nit || '';
+        const companyVal = user.user_metadata?.razon_social || user.user_metadata?.empresa || '';
+        const compVal = user.user_metadata?.complemento || '';
+        const countryVal = user.user_metadata?.pais_origen || '';
+        
+        setNombres(nameVal);
+        setApellidos(lastNameVal);
+        setEmail(emailVal);
+        setTipoDocumento(docTypeVal);
+        setNumeroDocumento(nitVal);
+        setRazonSocial(companyVal);
+        setComplemento(compVal);
+        setPaisOrigen(countryVal);
+
+        // Validar campos autocompletados
+        if (nameVal) validateNombres(nameVal);
+        if (lastNameVal) validateApellidos(lastNameVal);
+        if (emailVal) validateEmail(emailVal);
+        if (nitVal) validateNit(nitVal, docTypeVal);
+        if (countryVal) validatePaisOrigen(countryVal, docTypeVal);
+      } else {
+        setHasSession(false);
+      }
+    }
+    checkAuth();
+  }, []);
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
@@ -236,17 +359,26 @@ export default function CheckoutStepperPage() {
     }
   };
 
+  // --- REGLAS DE BOTÓN DESACTIVADO DINÁMICO SEGÚN TIPO DE DOCUMENTO ---
+  const isStep1Invalid = !nombres || !apellidos || !email || !numeroDocumento ||
+                         (tipoDocumento === 'NIT' && !razonSocial) ||
+                         (tipoDocumento === 'Carnet Extranjero' && !paisOrigen) ||
+                         !!errorNombres || !!errorApellidos || !!errorEmail || !!errorNit ||
+                         (tipoDocumento === 'Carnet Extranjero' && !!errorPaisOrigen);
+
+  const isStep2Invalid = !direccion || !telefono || !!errorDireccion || !!errorTelefono;
+
   const nextStep = () => {
     if (currentStep === 1) {
-      if (!nombres || !apellidos || !numeroDocumento || !razonSocial || !email) {
-        toast.error('Por favor, complete todos los campos de Identidad y Facturación (incluyendo el correo electrónico).');
+      if (isStep1Invalid) {
+        toast.error('Por favor, complete correctamente todos los campos obligatorios de Identidad y Facturación.');
         return;
       }
     }
 
     if (currentStep === 2) {
-      if (!direccion || !telefono) {
-        toast.error('Por favor, ingrese su dirección completa y teléfono de contacto.');
+      if (isStep2Invalid) {
+        toast.error('Por favor, ingrese su dirección completa y teléfono de contacto válidos.');
         return;
       }
     }
@@ -261,6 +393,11 @@ export default function CheckoutStepperPage() {
   const handleCheckoutSubmit = () => {
     if (cart.length === 0) {
       toast.error('El carrito de compras está vacío.');
+      return;
+    }
+
+    if (isStep1Invalid || isStep2Invalid) {
+      toast.error('Existen errores en los datos del formulario. Por favor, revíselos.');
       return;
     }
 
@@ -440,20 +577,38 @@ export default function CheckoutStepperPage() {
                             <Input
                               id="nombres"
                               value={nombres}
-                              onChange={e => setNombres(e.target.value)}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setNombres(val);
+                                validateNombres(val);
+                              }}
                               placeholder="Juan"
-                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                                errorNombres ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                              }`}
                             />
+                            {errorNombres && (
+                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorNombres}</p>
+                            )}
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor="apellidos" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Apellidos *</Label>
                             <Input
                               id="apellidos"
                               value={apellidos}
-                              onChange={e => setApellidos(e.target.value)}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setApellidos(val);
+                                validateApellidos(val);
+                              }}
                               placeholder="Pérez"
-                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                                errorApellidos ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                              }`}
                             />
+                            {errorApellidos && (
+                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorApellidos}</p>
+                            )}
                           </div>
                         </div>
 
@@ -463,62 +618,113 @@ export default function CheckoutStepperPage() {
                             id="email"
                             type="email"
                             value={email}
-                            onChange={e => setEmail(e.target.value)}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setEmail(val);
+                              validateEmail(val);
+                            }}
                             placeholder="cliente@correo.com"
-                            className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                            className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                              errorEmail ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                            }`}
                           />
+                          {errorEmail && (
+                            <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorEmail}</p>
+                          )}
                         </div>
 
+                        {/* --- SELECTOR DENSAMENTE DISEÑADO Y CAMPOS DINÁMICOS DE IDENTIDAD --- */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Tipo de Documento *</Label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                              {[
-                                { value: 'NIT', label: 'NIT' },
-                                { value: 'CI', label: 'C.I.' },
-                                { value: 'Pasaporte', label: 'Pasp.' },
-                                { value: 'Extranjero', label: 'Extr.' }
-                              ].map((opt) => {
-                                const isSelected = tipoDocumento === opt.value;
-                                return (
-                                  <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => setTipoDocumento(opt.value)}
-                                    className={`py-2 px-1 border rounded-lg transition-all font-bold text-[10px] uppercase text-center select-none cursor-pointer ${
-                                      isSelected 
-                                        ? 'border-[#cc0000] bg-[#cc0000]/5 text-slate-900 ring-1 ring-[#cc0000] shadow-sm font-black'
-                                        : 'border-slate-200 bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                                    }`}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            <select
+                              value={tipoDocumento}
+                              onChange={e => handleTipoDocumentoChange(e.target.value)}
+                              className="w-full bg-white text-black border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none"
+                            >
+                              <option value="CI">Cédula de Identidad (C.I.)</option>
+                              <option value="NIT">Número de Identificación Tributaria (NIT)</option>
+                              <option value="Carnet Extranjero">Carnet Extranjero / Pasaporte</option>
+                            </select>
                           </div>
+                          
                           <div className="space-y-1.5">
-                            <Label htmlFor="docNum" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Número de Documento *</Label>
+                            <Label htmlFor="docNum" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                              {tipoDocumento === 'CI' && 'Número de CI *'}
+                              {tipoDocumento === 'NIT' && 'Número de NIT *'}
+                              {tipoDocumento === 'Carnet Extranjero' && 'Número de Pasaporte/Carnet *'}
+                            </Label>
                             <Input
                               id="docNum"
                               value={numeroDocumento}
-                              onChange={e => setNumeroDocumento(e.target.value)}
-                              placeholder="1020405060"
-                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                              onChange={e => {
+                                const val = e.target.value;
+                                setNumeroDocumento(val);
+                                validateNit(val, tipoDocumento);
+                              }}
+                              placeholder={
+                                tipoDocumento === 'CI' ? '1234567' : 
+                                tipoDocumento === 'NIT' ? '1020405060' : 'E-987654'
+                              }
+                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                                errorNit ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                              }`}
                             />
+                            {errorNit && (
+                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorNit}</p>
+                            )}
                           </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                          <Label htmlFor="razon" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Razón Social *</Label>
-                          <Input
-                            id="razon"
-                            value={razonSocial}
-                            onChange={e => setRazonSocial(e.target.value)}
-                            placeholder="Pérez Distribuciones S.R.L. o Consumidor Final"
-                            className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
-                          />
-                        </div>
+                        {/* Campos Condicionales Basados en el Tipo de Documento Seleccionado */}
+                        {tipoDocumento === 'CI' && (
+                          <div className="space-y-1.5 animate-fade-in">
+                            <Label htmlFor="complemento" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Complemento (Opcional)</Label>
+                            <Input
+                              id="complemento"
+                              value={complemento}
+                              onChange={e => setComplemento(e.target.value)}
+                              placeholder="Ej. 1B (si aplica)"
+                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                            />
+                          </div>
+                        )}
+
+                        {tipoDocumento === 'NIT' && (
+                          <div className="space-y-1.5 animate-fade-in">
+                            <Label htmlFor="razon" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Razón Social *</Label>
+                            <Input
+                              id="razon"
+                              value={razonSocial}
+                              onChange={e => setRazonSocial(e.target.value)}
+                              placeholder="Pérez Distribuciones S.R.L. o Consumidor Final"
+                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                            />
+                          </div>
+                        )}
+
+                        {tipoDocumento === 'Carnet Extranjero' && (
+                          <div className="space-y-1.5 animate-fade-in">
+                            <Label htmlFor="paisOrigen" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">País de Origen *</Label>
+                            <Input
+                              id="paisOrigen"
+                              value={paisOrigen}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setPaisOrigen(val);
+                                validatePaisOrigen(val, tipoDocumento);
+                              }}
+                              placeholder="Ej. Alemania, Argentina, España..."
+                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                                errorPaisOrigen ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                              }`}
+                            />
+                            {errorPaisOrigen && (
+                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorPaisOrigen}</p>
+                            )}
+                          </div>
+                        )}
+
                       </div>
                     </div>
                   )}
@@ -539,13 +745,20 @@ export default function CheckoutStepperPage() {
                           <Input
                             id="dir"
                             value={direccion}
-                            onChange={e => setDireccion(e.target.value)}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setDireccion(val);
+                              validateDireccion(val);
+                            }}
                             required
                             placeholder={gpsFailed ? "Escriba detalladamente calle, número de puerta, edificio, zona..." : "Av. Arce, Edificio Multicentro, Nro. 1200"}
                             className={`bg-white text-black placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
-                              gpsFailed ? 'border-red-400 focus-visible:ring-red-500 focus-visible:border-red-500 ring-1 ring-red-100' : 'border-gray-300'
+                              errorDireccion || gpsFailed ? 'border-red-500 focus-visible:ring-red-500 focus-visible:border-red-500 ring-1 ring-red-100' : 'border-gray-300'
                             }`}
                           />
+                          {errorDireccion && (
+                            <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorDireccion}</p>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -583,10 +796,19 @@ export default function CheckoutStepperPage() {
                               id="tel"
                               type="tel"
                               value={telefono}
-                              onChange={e => setTelefono(e.target.value)}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTelefono(val);
+                                validateTelefono(val);
+                              }}
                               placeholder="70012345"
-                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                                errorTelefono ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                              }`}
                             />
+                            {errorTelefono && (
+                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorTelefono}</p>
+                            )}
                           </div>
                         </div>
 
@@ -729,7 +951,7 @@ export default function CheckoutStepperPage() {
                       variant="ghost"
                       onClick={prevStep}
                       disabled={currentStep === 1 || isPending}
-                      className="text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-1 rounded-lg text-xs cursor-pointer font-bold"
+                      className="text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all flex items-center gap-1 rounded-lg text-xs cursor-pointer font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <ArrowLeft className="w-4 h-4 text-[#cc0000]" /> Anterior
                     </Button>
@@ -738,7 +960,11 @@ export default function CheckoutStepperPage() {
                       <Button
                         type="button"
                         onClick={nextStep}
-                        className="bg-[#cc0000] hover:bg-[#a30000] text-white text-xs font-bold uppercase tracking-wider py-2.5 px-5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        disabled={
+                          (currentStep === 1 && isStep1Invalid) ||
+                          (currentStep === 2 && isStep2Invalid)
+                        }
+                        className="bg-[#cc0000] hover:bg-[#a30000] text-white text-xs font-bold uppercase tracking-wider py-2.5 px-5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Siguiente <ArrowRight className="w-4 h-4" />
                       </Button>
@@ -746,8 +972,8 @@ export default function CheckoutStepperPage() {
                       <Button
                         type="button"
                         onClick={handleCheckoutSubmit}
-                        disabled={isPending}
-                        className="bg-[#cc0000] hover:bg-[#a30000] text-white text-xs font-bold uppercase tracking-wider py-2.5 px-6 rounded-lg flex items-center gap-1.5 shadow-lg shadow-[#cc0000]/10 transition-all active:scale-95 cursor-pointer"
+                        disabled={isPending || isStep1Invalid || isStep2Invalid}
+                        className="bg-[#cc0000] hover:bg-[#a30000] text-white text-xs font-bold uppercase tracking-wider py-2.5 px-6 rounded-lg flex items-center gap-1.5 shadow-lg shadow-[#cc0000]/10 transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {isPending ? (
                           <>

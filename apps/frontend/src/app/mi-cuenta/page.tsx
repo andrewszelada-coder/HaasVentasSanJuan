@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, ClipboardList, PhoneCall, ArrowLeft, LogOut, Loader2, 
   MapPin, Receipt, ShieldCheck, ShoppingCart, HelpCircle, 
@@ -55,12 +54,17 @@ export default function MiCuentaPage() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // Form states for profile & billing
+  // Form states for profile & B2B billing
   const [nombres, setNombres] = useState('');
   const [apellidos, setApellidos] = useState('');
   const [telefono, setTelefono] = useState('');
   const [nit, setNit] = useState('');
   const [empresa, setEmpresa] = useState('');
+  
+  // --- NUEVOS ESTADOS DE IDENTIDAD B2B ---
+  const [tipoDocumento, setTipoDocumento] = useState('NIT');
+  const [complemento, setComplemento] = useState('');
+  const [paisOrigen, setPaisOrigen] = useState('');
 
   const checkAuth = async () => {
     try {
@@ -76,8 +80,11 @@ export default function MiCuentaPage() {
       setNombres(user.user_metadata?.first_name || user.user_metadata?.nombres || '');
       setApellidos(user.user_metadata?.last_name || user.user_metadata?.apellidos || '');
       setTelefono(user.user_metadata?.telefono || '');
-      setNit(user.user_metadata?.nit || '');
-      setEmpresa(user.user_metadata?.empresa || '');
+      setTipoDocumento(user.user_metadata?.tipo_documento || 'NIT');
+      setNit(user.user_metadata?.numero_documento || user.user_metadata?.nit || '');
+      setEmpresa(user.user_metadata?.razon_social || user.user_metadata?.empresa || '');
+      setComplemento(user.user_metadata?.complemento || '');
+      setPaisOrigen(user.user_metadata?.pais_origen || '');
 
       // Load client orders
       const userOrders = await getPedidosCliente(user.id);
@@ -110,15 +117,20 @@ export default function MiCuentaPage() {
             first_name: nombres,
             last_name: apellidos,
             telefono: telefono,
+            tipo_documento: tipoDocumento,
+            numero_documento: nit,
             nit: nit,
-            empresa: empresa
+            empresa: empresa,
+            razon_social: empresa,
+            complemento: complemento || null,
+            pais_origen: paisOrigen || null
           }
         });
 
         if (error) {
           toast.error(`Error al guardar cambios: ${error.message}`);
         } else {
-          toast.success("¡Información de perfil y facturación actualizada!");
+          toast.success("¡Información de perfil y facturación actualizada B2B!");
           localStorage.setItem('haas_session_active', 'true');
           // Reload user instance in state
           const { data: { user: updatedUser } } = await supabase.auth.getUser();
@@ -138,6 +150,13 @@ export default function MiCuentaPage() {
       window.location.href = '/reservas';
     });
   };
+
+  // WhatsApp Link Generativo
+  const customerName = nombres ? `${nombres} ${apellidos}` : (empresa || 'Cliente Haas B2B');
+  const whatsappMsg = encodeURIComponent(
+    `Hola Industrias Haas, soy ${customerName}. Necesito asistencia sobre mis pedidos de preventa San Juan 2026.`
+  );
+  const whatsappUrl = `https://wa.me/59170012345?text=${whatsappMsg}`;
 
   // UX B2B premium: Agrega dinámicamente los mismos ítems del pedido al carrito
   const handleReorder = (pedido: Pedido) => {
@@ -185,13 +204,6 @@ export default function MiCuentaPage() {
       toast.error("Error al procesar el reordenamiento del pedido.");
     }
   };
-
-  // WhatsApp Link Generativo
-  const customerName = nombres ? `${nombres} ${apellidos}` : (empresa || 'Cliente Haas B2B');
-  const whatsappMsg = encodeURIComponent(
-    `Hola Industrias Haas, soy ${customerName}. Necesito asistencia sobre mis pedidos de preventa San Juan 2026.`
-  );
-  const whatsappUrl = `https://wa.me/59170012345?text=${whatsappMsg}`;
 
   if (!mounted || loading) {
     return (
@@ -364,14 +376,14 @@ export default function MiCuentaPage() {
               </CardContent>
             </Card>
           </TabsContent>
-
-          {/* TAB 2: PROFILE AND BILLING INFORMATION */}
+ 
+          {/* TAB 2: PROFILE AND BILLING INFORMATION (Mis Datos updated) */}
           <TabsContent value="perfil">
             <Card className="border border-slate-200/80 bg-white rounded-3xl overflow-hidden shadow-xl relative">
               <div className="h-[3px] bg-[#cc0000] absolute top-0 left-0 right-0" />
               <CardHeader className="p-6 border-b border-slate-100 bg-slate-50/20 select-none">
                 <CardTitle className="text-base font-black text-slate-900 uppercase tracking-tight">Información de Perfil y Facturación B2B</CardTitle>
-                <CardDescription className="text-[11px] font-medium text-slate-400">Actualice sus datos personales y tributarios. Al guardar esta información, sus futuros procesos de checkout se autocompletarán de forma instantánea.</CardDescription>
+                <CardDescription className="text-[11px] font-medium text-slate-400">Actualice sus datos personales y tributarios de facturación. Al guardar esta información, sus futuros procesos de checkout se autocompletarán de forma instantánea.</CardDescription>
               </CardHeader>
 
               <form onSubmit={handleUpdateProfile}>
@@ -430,11 +442,73 @@ export default function MiCuentaPage() {
                         id="nit"
                         value={nit}
                         onChange={e => setNit(e.target.value)}
-                        placeholder="10203040"
+                        placeholder={
+                          tipoDocumento === 'CI' ? 'Ej. 1234567' : 
+                          tipoDocumento === 'NIT' ? 'Ej. 10203040' : 'Ej. E-987654'
+                        }
                         disabled={isProfilePending}
                         className="bg-white text-black border-slate-250 placeholder:text-slate-400 focus-visible:ring-[#cc0000] focus-visible:border-[#cc0000] rounded-xl text-xs h-10 shadow-sm font-mono"
                       />
                     </div>
+                  </div>
+
+                  {/* NUEVOS CAMPOS DINÁMICOS DE TIPO DE DOCUMENTO B2B */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="tipoDocumento" className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipo de Documento</Label>
+                      <select
+                        id="tipoDocumento"
+                        value={tipoDocumento}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTipoDocumento(val);
+                          // Conmutación segura e instantánea de sub-estados
+                          setComplemento('');
+                          setPaisOrigen('');
+                          if (val === 'NIT') {
+                            setComplemento('');
+                          } else if (val === 'CI') {
+                            setEmpresa('');
+                          }
+                        }}
+                        disabled={isProfilePending}
+                        className="w-full bg-white text-black border border-slate-250 rounded-xl p-2.5 text-xs focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none h-10 shadow-sm"
+                      >
+                        <option value="CI">Cédula de Identidad (C.I.)</option>
+                        <option value="NIT">Número de Identificación Tributaria (NIT)</option>
+                        <option value="Carnet Extranjero">Carnet Extranjero / Pasaporte</option>
+                      </select>
+                    </div>
+
+                    {/* Campo condicional de Complemento solo para Cédula de Identidad */}
+                    {tipoDocumento === 'CI' && (
+                      <div className="space-y-1.5 animate-fade-in">
+                        <Label htmlFor="complemento" className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Complemento (Opcional)</Label>
+                        <Input
+                          id="complemento"
+                          value={complemento}
+                          onChange={e => setComplemento(e.target.value)}
+                          placeholder="Ej. 1B (si aplica)"
+                          disabled={isProfilePending}
+                          className="bg-white text-black border-slate-250 placeholder:text-slate-400 focus-visible:ring-[#cc0000] focus-visible:border-[#cc0000] rounded-xl text-xs h-10 shadow-sm"
+                        />
+                      </div>
+                    )}
+
+                    {/* Campo condicional de País de Origen para extranjeros */}
+                    {tipoDocumento === 'Carnet Extranjero' && (
+                      <div className="space-y-1.5 animate-fade-in">
+                        <Label htmlFor="paisOrigen" className="text-[10px] font-bold uppercase tracking-wider text-slate-400">País de Origen</Label>
+                        <Input
+                          id="paisOrigen"
+                          value={paisOrigen}
+                          onChange={e => setPaisOrigen(e.target.value)}
+                          placeholder="Ej. España, Alemania, Argentina..."
+                          disabled={isProfilePending}
+                          className="bg-white text-black border-slate-250 placeholder:text-slate-400 focus-visible:ring-[#cc0000] focus-visible:border-[#cc0000] rounded-xl text-xs h-10 shadow-sm"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

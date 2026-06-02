@@ -62,6 +62,7 @@ export default function LoginPage() {
     const password = formData.get('password') as string;
     const birthDate = formData.get('birthDate') as string;
 
+    // Validación básica de campos obligatorios
     if (!nombres || !apellidos || !email || !password) {
       setErrorMsg('Por favor complete todos los campos obligatorios (*).');
       return;
@@ -97,6 +98,7 @@ export default function LoginPage() {
       toast.success("¡Cuenta creada exitosamente!");
       setSuccessMsg("¡Cuenta creada exitosamente! Redirigiendo...");
       form.reset();
+      
       router.push('/reservas');
       router.refresh();
     });
