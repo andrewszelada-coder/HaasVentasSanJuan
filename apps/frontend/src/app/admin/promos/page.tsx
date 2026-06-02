@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useTransition } from 'react';
 import { getPromociones, crearPromoAction, editarPromoAction, togglePromoActivoAction, eliminarPromoAction } from '@/app/actions';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -36,6 +37,7 @@ export default function AdminPromosPage() {
   const [precio, setPrecio] = useState('');
   const [imagenUrl, setImagenUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [activo, setActivo] = useState(true);
   const [categoria, setCategoria] = useState('Producto San Juan');
   const [tipoVenta, setTipoVenta] = useState('En paquetes (Unidades)');
@@ -71,6 +73,7 @@ export default function AdminPromosPage() {
     setPrecio('');
     setImagenUrl('');
     setPreviewUrl('');
+    setImageFile(null);
     setActivo(true);
     setCategoria('Producto San Juan');
     setTipoVenta('En paquetes (Unidades)');
@@ -84,6 +87,7 @@ export default function AdminPromosPage() {
     setPrecio(p.precio_bs.toString());
     setImagenUrl(p.imagen_url);
     setPreviewUrl(p.imagen_url);
+    setImageFile(null);
     setActivo(p.activo);
     setCategoria(p.categoria || 'Producto San Juan');
     setTipoVenta(p.tipo_venta || 'En paquetes (Unidades)');
@@ -98,30 +102,63 @@ export default function AdminPromosPage() {
       return;
     }
 
-    const payload = {
-      titulo,
-      descripcion,
-      precio_bs: Number(precio),
-      imagen_url: imagenUrl,
-      activo,
-      categoria,
-      tipo_venta: tipoVenta
-    };
-
     startTransition(async () => {
-      let result;
-      if (editId) {
-        result = await editarPromoAction(editId, payload);
-      } else {
-        result = await crearPromoAction(payload);
-      }
+      try {
+        let finalImageUrl = imagenUrl;
 
-      if (result && result.error) {
-        toast.error(result.error);
-      } else {
-        toast.success(editId ? "Producto editado con éxito." : "Producto ingresado con éxito.");
-        setModalOpen(false);
-        await loadData();
+        // Si hay una nueva imagen seleccionada localmente, subirla a Supabase Storage
+        if (imageFile) {
+          const supabase = createClient();
+          const fileExt = imageFile.name.split('.').pop();
+          // Nombre de archivo sanitizado y único
+          const sanitizedTitle = titulo.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const fileName = `${sanitizedTitle}_${Date.now()}.${fileExt}`;
+
+          const { data, error } = await supabase.storage
+            .from('productos')
+            .upload(fileName, imageFile, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (error) {
+            throw new Error(`Error de Supabase Storage: ${error.message}`);
+          }
+
+          // Obtener la URL pública del archivo subido
+          const { data: { publicUrl } } = supabase.storage
+            .from('productos')
+            .getPublicUrl(fileName);
+
+          finalImageUrl = publicUrl;
+        }
+
+        const payload = {
+          titulo,
+          descripcion,
+          precio_bs: Number(precio),
+          imagen_url: finalImageUrl,
+          activo,
+          categoria,
+          tipo_venta: tipoVenta
+        };
+
+        let result;
+        if (editId) {
+          result = await editarPromoAction(editId, payload);
+        } else {
+          result = await crearPromoAction(payload);
+        }
+
+        if (result && result.error) {
+          toast.error(result.error);
+        } else {
+          toast.success(editId ? "Producto editado con éxito." : "Producto ingresado con éxito.");
+          setModalOpen(false);
+          await loadData();
+        }
+      } catch (err: any) {
+        toast.error(err?.message || "Ocurrió un error al procesar la imagen del producto.");
       }
     });
   };
@@ -367,10 +404,10 @@ export default function AdminPromosPage() {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
+                        setImageFile(file);
                         const reader = new FileReader();
                         reader.onloadend = () => {
                           setPreviewUrl(reader.result as string);
-                          setImagenUrl(reader.result as string); // Base64 para persistencia nativa autónoma
                         };
                         reader.readAsDataURL(file);
                       }

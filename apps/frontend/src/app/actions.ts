@@ -30,6 +30,22 @@ const clean = <T>(data: T): T => {
 };
 
 // =========================================================================
+// HELPER PARA VERIFICAR ROL DE ADMINISTRADOR (SEGURIDAD SERVIDOR)
+// =========================================================================
+async function checkAdmin(supabase: any) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data: profile } = await supabase
+    .from('usuarios')
+    .select('rol')
+    .eq('id', user.id)
+    .single();
+
+  return profile?.rol === 'admin';
+}
+
+// =========================================================================
 // 1. AUTENTICACIÓN
 // =========================================================================
 
@@ -114,6 +130,10 @@ export async function crearPromoAction(data: {
   const cleaned = clean(data);
   const supabase = await createClient();
 
+  if (!(await checkAdmin(supabase))) {
+    return { error: 'No autorizado. Permisos insuficientes.' };
+  }
+
   const { error } = await supabase.from('promociones_sanjuan').insert([
     {
       titulo: cleaned.titulo,
@@ -149,6 +169,10 @@ export async function editarPromoAction(id: string, data: {
   const cleaned = clean(data);
   const supabase = await createClient();
 
+  if (!(await checkAdmin(supabase))) {
+    return { error: 'No autorizado. Permisos insuficientes.' };
+  }
+
   const { error } = await supabase
     .from('promociones_sanjuan')
     .update({
@@ -176,6 +200,10 @@ export async function togglePromoActivoAction(id: string, activo: boolean) {
   const cleanedId = clean(id);
   const supabase = await createClient();
 
+  if (!(await checkAdmin(supabase))) {
+    return { error: 'No autorizado. Permisos insuficientes.' };
+  }
+
   const { error } = await supabase
     .from('promociones_sanjuan')
     .update({ activo })
@@ -193,6 +221,10 @@ export async function togglePromoActivoAction(id: string, activo: boolean) {
 export async function eliminarPromoAction(id: string) {
   const cleanedId = clean(id);
   const supabase = await createClient();
+
+  if (!(await checkAdmin(supabase))) {
+    return { error: 'No autorizado. Permisos insuficientes.' };
+  }
 
   const { error } = await supabase
     .from('promociones_sanjuan')
@@ -521,6 +553,10 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
   const cleanedId = clean(pedidoId);
   const cleanedEstado = clean(nuevoEstado);
   const supabase = await createClient();
+
+  if (!(await checkAdmin(supabase))) {
+    return { error: 'No autorizado. Permisos insuficientes.' };
+  }
 
   const { data: pedido, error: fetchErr } = await supabase
     .from('pedidos')
