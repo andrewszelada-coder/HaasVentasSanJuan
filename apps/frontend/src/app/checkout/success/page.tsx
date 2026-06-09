@@ -22,6 +22,9 @@ interface OrderData {
   nit: string;
   direccion: string;
   metodoPago: string;
+  sucursalSeleccionada?: string;
+  celular?: string;
+  detalleItems?: string;
 }
 
 export default function CheckoutSuccessPage() {
@@ -49,14 +52,26 @@ export default function CheckoutSuccessPage() {
     );
   }
 
+  const formattedItems = order.detalleItems
+    ? order.detalleItems.split(', ').map(item => `• ${item}`).join('\n')
+    : '• S/N';
+
   // Plantilla del mensaje formateado para WhatsApp
-  const messageText = `Hola Industrias Haas! He realizado mi reserva Especial San Juan 2026.
-Nº Reserva: ${order.orderId.substring(0, 8)}
-Total: Bs. ${order.totalBs.toFixed(2)}
-Factura: ${order.razonSocial} (NIT: ${order.nit})
-Dirección: ${order.direccion}
-Método de Pago: ${order.metodoPago}
-Por favor confirmar el despacho. ¡Gracias!`;
+  const messageText = `¡Hola! 👋
+Acabo de realizar una reserva en Industrias Haas.
+
+📍 Sucursal: ${order.sucursalSeleccionada || 'S/N'}
+
+🛒 Detalle del pedido:
+${formattedItems}
+
+💰 Total con 10% de descuento: Bs. ${order.totalBs.toFixed(2)}
+
+📸 Ya realicé el pago mediante QR. Adjunto el comprobante para confirmar mi pedido.
+
+✅ Quedo atento(a) a la confirmación y coordinación de entrega o recojo.
+
+¡Muchas gracias! 🙌`;
 
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${NUMERO_WHATSAPP}&text=${encodeURIComponent(messageText)}`;
 
@@ -96,30 +111,19 @@ Por favor confirmar el despacho. ¡Gracias!`;
             {order.metodoPago === 'Transferencia QR' && (
               <div className="bg-white border border-slate-200 rounded-3xl p-6 text-center space-y-4 max-w-sm mx-auto shadow-sm">
                 {/* Contenedor blanco para el código QR */}
-                <div className="bg-white border-4 border-white p-4 rounded-2xl inline-block shadow-md">
-                  {/* Código QR dibujado mediante SVG de alta visibilidad para escaneo */}
-                  <svg className="w-40 h-40 mx-auto text-black" viewBox="0 0 100 100">
-                    <rect width="100" height="100" fill="white" />
-                    <rect x="5" y="5" width="25" height="25" fill="currentColor" />
-                    <rect x="10" y="10" width="15" height="15" fill="white" />
-                    <rect x="13" y="13" width="9" height="9" fill="currentColor" />
-                    <rect x="70" y="5" width="25" height="25" fill="currentColor" />
-                    <rect x="75" y="10" width="15" height="15" fill="white" />
-                    <rect x="78" y="13" width="9" height="9" fill="currentColor" />
-                    <rect x="5" y="70" width="25" height="25" fill="currentColor" />
-                    <rect x="10" y="75" width="15" height="15" fill="white" />
-                    <rect x="13" y="78" width="9" height="9" fill="currentColor" />
-                    <rect x="40" y="40" width="20" height="20" fill="currentColor" />
-                    <rect x="45" y="45" width="10" height="10" fill="white" />
-                    <rect x="48" y="48" width="4" height="4" fill="currentColor" />
-                    <rect x="45" y="10" width="8" height="20" fill="currentColor" />
-                    <rect x="70" y="45" width="20" height="8" fill="currentColor" />
-                    <rect x="10" y="45" width="20" height="8" fill="currentColor" />
-                    <rect x="45" y="70" width="8" height="20" fill="currentColor" />
-                  </svg>
+                <div className="bg-white border-4 border-white p-4 rounded-2xl inline-block shadow-md animate-fade-in">
+                  <img
+                    src={order.sucursalSeleccionada === 'Almacén Haas Av. América' ? 'https://xymvwsnyvpupejjcsuxz.supabase.co/storage/v1/object/public/qrs/qr_americahaas.jpg' : 'https://xymvwsnyvpupejjcsuxz.supabase.co/storage/v1/object/public/qrs/qr_HeroinasHaas.jpg'}
+                    alt="QR de Pago"
+                    className="w-40 h-40 mx-auto object-contain rounded-xl"
+                  />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
+                  <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider bg-emerald-50 border border-emerald-100 rounded-full py-0.5 px-3 w-fit mx-auto">
+                    Pago 100% mediante QR a la sucursal seleccionada
+                  </span>
                   <span className="block text-xs font-bold text-gray-900 uppercase tracking-wider">Transferencia Bancaria QR</span>
+                  <span className="block text-[10px] text-gray-500 font-mono font-bold">Sucursal: {order.sucursalSeleccionada || 'S/N'}</span>
                   <span className="block text-[10px] text-gray-500 font-mono font-bold">Total a transferir: Bs. {order.totalBs.toFixed(2)}</span>
                 </div>
               </div>
@@ -129,7 +133,15 @@ Por favor confirmar el despacho. ¡Gracias!`;
             <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-2.5 text-xs text-left">
               <div className="flex justify-between">
                 <span className="text-gray-500 font-mono font-semibold">Código Pedido:</span>
-                <span className="font-bold font-mono text-gray-900 select-all">{order.orderId}</span>
+                <span className="font-bold font-mono text-gray-900 select-all">{'HAAS-' + order.orderId.slice(-6).toUpperCase()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 font-mono font-semibold">Sucursal de Recojo:</span>
+                <span className="font-bold text-gray-900">{order.sucursalSeleccionada || 'S/N'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 font-mono font-semibold">Celular de Contacto:</span>
+                <span className="font-bold font-mono text-gray-900">{order.celular || 'S/N'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500 font-mono font-semibold">Factura Razón Social:</span>
@@ -140,15 +152,11 @@ Por favor confirmar el despacho. ¡Gracias!`;
                 <span className="font-bold font-mono text-gray-900">{order.nit}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500 font-mono font-semibold">Dirección Despacho:</span>
-                <span className="font-bold text-gray-900 text-right max-w-[60%] truncate">{order.direccion}</span>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-gray-500 font-mono font-semibold">Método de Pago:</span>
                 <span className="font-bold text-gray-900">{order.metodoPago}</span>
               </div>
               <div className="flex justify-between pt-2.5 border-t border-slate-200 text-sm">
-                <span className="text-gray-500 font-extrabold uppercase">Total Reservado:</span>
+                <span className="text-gray-500 font-extrabold uppercase">Total Reservado (10% desc. aplicado):</span>
                 <span className="font-black font-mono text-[#cc0000]">Bs. {order.totalBs.toFixed(2)}</span>
               </div>
             </div>

@@ -38,9 +38,20 @@ export async function middleware(request: NextRequest) {
       .single();
 
     const role = profile?.rol;
+    const isSucursalUser = role === 'vendedor' || role === 'sucursal';
 
-    if (role !== 'admin') {
-      // Si no es admin, redirigir a reservas
+    if (role === 'admin') {
+      // Admin tiene acceso a todo /admin
+    } else if (isSucursalUser) {
+      // Personal de sucursal solo puede acceder a /admin/sucursal
+      const isSucursalPath = path === '/admin/sucursal' || path.startsWith('/admin/sucursal/');
+      if (!isSucursalPath) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = '/admin/sucursal';
+        return NextResponse.redirect(redirectUrl);
+      }
+    } else {
+      // Clientes u otros roles no pueden acceder a /admin
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = '/reservas';
       return NextResponse.redirect(redirectUrl);

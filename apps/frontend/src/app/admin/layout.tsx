@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions';
-import { ClipboardList, PackagePlus, ArrowLeft, LogOut, Loader2, Menu, X, History } from 'lucide-react';
+import { ClipboardList, PackagePlus, ArrowLeft, LogOut, Loader2, Menu, X, History, Store } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export default function AdminLayout({
   children,
@@ -15,24 +16,53 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const supabase = createClient();
 
-  const menuItems = [
-    {
-      name: 'Gestión Reservas',
-      href: '/admin/pedidos',
-      icon: <ClipboardList className="w-4 h-4" />
-    },
-    {
-      name: 'Historial Reservas',
-      href: '/admin/historial',
-      icon: <History className="w-4 h-4" />
-    },
-    {
-      name: 'Gestión Promos',
-      href: '/admin/promos',
-      icon: <PackagePlus className="w-4 h-4" />
+  useEffect(() => {
+    async function loadRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('usuarios')
+          .select('rol')
+          .eq('id', user.id)
+          .single();
+        setUserRole(profile?.rol || null);
+      }
     }
-  ];
+    loadRole();
+  }, []);
+
+  const menuItems: Array<{ name: string; href: string; icon: React.ReactNode }> = [];
+
+  if (userRole === 'admin') {
+    menuItems.push(
+      {
+        name: 'Gestión Reservas',
+        href: '/admin/pedidos',
+        icon: <ClipboardList className="w-4 h-4" />
+      },
+      {
+        name: 'Historial Reservas',
+        href: '/admin/historial',
+        icon: <History className="w-4 h-4" />
+      },
+      {
+        name: 'Gestión Promos',
+        href: '/admin/promos',
+        icon: <PackagePlus className="w-4 h-4" />
+      }
+    );
+  } else if (userRole === 'vendedor' || userRole === 'sucursal') {
+    menuItems.push(
+      {
+        name: 'Panel Sucursal',
+        href: '/admin/sucursal',
+        icon: <Store className="w-4 h-4" />
+      }
+    );
+  }
 
   const handleLogout = () => {
     startTransition(async () => {

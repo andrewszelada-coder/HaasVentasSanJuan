@@ -35,7 +35,7 @@ interface PedidoItem {
 interface Pedido {
   id: string;
   total_bs: number;
-  estado: 'pendiente' | 'aprobado' | 'cancelado';
+  estado: 'pendiente' | 'aprobado' | 'cancelado' | 'preparando' | 'entregado';
   fecha_creacion: string;
   nombres_facturacion?: string;
   tipo_documento?: string;
@@ -55,6 +55,7 @@ interface Pedido {
     nit: string;
     sucursal: string;
   };
+  sucursal_seleccionada?: string;
   pedido_items?: PedidoItem[];
 }
 
@@ -72,6 +73,7 @@ export default function AdminHistorialPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [sucursalFilter, setSucursalFilter] = useState('Todas');
 
   const [isMounted, setIsMounted] = useState(false);
 
@@ -179,14 +181,14 @@ export default function AdminHistorialPage() {
 
       return `
         <tr>
-          <td style="mso-number-format:'@';">${p.id}</td>
+          <td style="mso-number-format:'@';">${'HAAS-' + p.id.slice(-6).toUpperCase()}</td>
           <td>${new Date(p.fecha_creacion).toLocaleDateString('es-BO', { timeZone: 'America/La_Paz' })}</td>
           <td>${p.nombres_facturacion || p.usuarios?.empresa || "Consumidor Final"}</td>
           <td>${p.usuarios?.email || "Invitado libre"}</td>
           <td>${p.telefono_contacto || "S/N"}</td>
           <td>${p.tipo_documento || (p.usuarios?.nit ? "NIT" : "S/N")}</td>
           <td style="mso-number-format:'@';">${p.numero_documento || p.usuarios?.nit || "S/N"}</td>
-          <td>${p.usuarios?.sucursal || "Central"}</td>
+          <td>${p.sucursal_seleccionada || "Central"}</td>
           <td>${p.direccion_entrega || "S/N"}</td>
           <td>${p.tipo_ubicacion || "Casa"}</td>
           <td class="number">${p.latitud || "S/N"}</td>
@@ -297,10 +299,16 @@ export default function AdminHistorialPage() {
   const totalReservas = pedidos.length;
   const ventasProyectadas = pedidos.reduce((sum, p) => p.estado !== 'cancelado' ? sum + Number(p.total_bs) : sum, 0);
 
+  const filteredPedidos = pedidos.filter(p => 
+    sucursalFilter === 'Todas' || 
+    (p.sucursal_seleccionada || 'Central') === sucursalFilter ||
+    (sucursalFilter === 'Central' && !p.sucursal_seleccionada)
+  );
+
   let granelKg = 0;
   let paquetesUnid = 0;
 
-  pedidos.forEach(p => {
+  filteredPedidos.forEach(p => {
     if (p.estado !== 'cancelado') {
       p.pedido_items?.forEach(item => {
         const titulo = (item.promociones_sanjuan?.titulo || '').toLowerCase();
@@ -314,16 +322,16 @@ export default function AdminHistorialPage() {
   });
 
   // Fallbacks proporcionales para KPI
-  if (granelKg === 0 && pedidos.length > 0) {
-    granelKg = pedidos.length * 6.5;
+  if (granelKg === 0 && filteredPedidos.length > 0) {
+    granelKg = filteredPedidos.length * 6.5;
   }
-  if (paquetesUnid === 0 && pedidos.length > 0) {
-    paquetesUnid = pedidos.reduce((acc, p) => acc + (p.pedido_items?.reduce((sum, i) => sum + i.cantidad, 0) || 0), 0) || (pedidos.length * 2);
+  if (paquetesUnid === 0 && filteredPedidos.length > 0) {
+    paquetesUnid = filteredPedidos.reduce((acc, p) => acc + (p.pedido_items?.reduce((sum, i) => sum + i.cantidad, 0) || 0), 0) || (filteredPedidos.length * 2);
   }
 
-  const totalPages = Math.ceil(pedidos.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredPedidos.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedPedidos = pedidos.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedPedidos = filteredPedidos.slice(startIndex, startIndex + itemsPerPage);
 
   if (!isMounted) {
     return (
@@ -383,6 +391,26 @@ export default function AdminHistorialPage() {
               onChange={e => setHasta(e.target.value)}
               className="w-full bg-white text-slate-900 border border-slate-200 rounded-xl p-2.5 text-xs focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none shadow-inner"
             />
+          </div>
+
+          <div className="space-y-1.5 flex-1 w-full">
+            <Label htmlFor="sucursalFilter" className="text-xs font-bold text-slate-500 uppercase tracking-widest block flex items-center gap-1">
+              📍 Sucursal
+            </Label>
+            <select
+              id="sucursalFilter"
+              value={sucursalFilter}
+              onChange={e => {
+                setSucursalFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full bg-white text-slate-900 border border-slate-200 rounded-xl p-2.5 text-xs focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none shadow-inner font-bold h-10"
+            >
+              <option value="Todas">Todas las Sucursales</option>
+              <option value="Super Haas Av. Heroínas Esq. Lanza">Super Haas Av. Heroínas Esq. Lanza</option>
+              <option value="Almacén Haas Av. América">Almacén Haas Av. América</option>
+              <option value="Central">Central / Sin asignar</option>
+            </select>
           </div>
 
           <Button
@@ -484,7 +512,7 @@ export default function AdminHistorialPage() {
                     {paginatedPedidos.map(pedido => (
                       <TableRow key={pedido.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                         <TableCell className="font-mono text-[10px] text-slate-400 font-semibold">
-                          {pedido.id.substring(0, 8)}...
+                          {'HAAS-' + pedido.id.slice(-6).toUpperCase()}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-0.5">
@@ -497,7 +525,7 @@ export default function AdminHistorialPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-slate-600 text-xs font-mono font-bold">
-                          {pedido.usuarios?.sucursal || 'Central'}
+                          {pedido.sucursal_seleccionada || 'Central'}
                         </TableCell>
                         <TableCell className="font-mono text-xs font-bold text-[#cc0000]">
                           Bs. {Number(pedido.total_bs).toFixed(2)}
@@ -506,14 +534,16 @@ export default function AdminHistorialPage() {
                           <Badge 
                             variant="outline"
                             className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
-                              pedido.estado === 'aprobado'
+                              pedido.estado === 'aprobado' || pedido.estado === 'entregado'
                                 ? 'bg-green-100 text-green-800 font-bold border border-green-300'
+                                : pedido.estado === 'preparando'
+                                ? 'bg-blue-100 text-blue-800 font-bold border border-blue-300'
                                 : pedido.estado === 'cancelado'
                                 ? 'bg-red-100 text-red-800 font-bold border border-red-300'
                                 : 'bg-yellow-100 text-yellow-800 font-bold border border-yellow-300'
                             }`}
                           >
-                            {pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
+                            {pedido.estado === 'entregado' ? 'Entregado' : pedido.estado === 'preparando' ? 'Preparando' : pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-slate-400 font-mono text-[10px] font-semibold">
@@ -552,6 +582,16 @@ export default function AdminHistorialPage() {
                                       Pendiente
                                     </span>
                                   </SelectItem>
+                                  <SelectItem value="preparando" className="cursor-pointer text-gray-900 font-bold">
+                                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-blue-800 border border-blue-300">
+                                      Preparando
+                                    </span>
+                                  </SelectItem>
+                                  <SelectItem value="entregado" className="cursor-pointer text-gray-900 font-bold">
+                                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
+                                      Entregado
+                                    </span>
+                                  </SelectItem>
                                   <SelectItem value="aprobado" className="cursor-pointer text-gray-900 font-bold">
                                     <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
                                       Realizado
@@ -579,19 +619,21 @@ export default function AdminHistorialPage() {
                   <div key={pedido.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm relative space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="font-mono text-[10px] text-slate-400 font-bold">
-                        #{pedido.id.substring(0, 8)}...
+                        {'HAAS-' + pedido.id.slice(-6).toUpperCase()}
                       </span>
                       <Badge 
                         variant="outline"
                         className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
-                          pedido.estado === 'aprobado'
+                          pedido.estado === 'aprobado' || pedido.estado === 'entregado'
                             ? 'bg-green-100 text-green-800 font-bold border border-green-300'
+                            : pedido.estado === 'preparando'
+                            ? 'bg-blue-100 text-blue-800 font-bold border border-blue-300'
                             : pedido.estado === 'cancelado'
                             ? 'bg-red-100 text-red-800 font-bold border border-red-300'
                             : 'bg-yellow-100 text-yellow-800 font-bold border border-yellow-300'
                         }`}
                       >
-                        {pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
+                        {pedido.estado === 'entregado' ? 'Entregado' : pedido.estado === 'preparando' ? 'Preparando' : pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
                       </Badge>
                     </div>
 
@@ -603,7 +645,7 @@ export default function AdminHistorialPage() {
                         Doc: <span className="font-mono font-semibold">{pedido.numero_documento || pedido.usuarios?.nit || 'S/N'}</span>
                       </span>
                       <span className="block text-[10px] text-slate-500 font-medium">
-                        Sucursal: <span className="font-bold text-slate-700">{pedido.usuarios?.sucursal || 'Central'}</span>
+                        Sucursal: <span className="font-bold text-slate-700">{pedido.sucursal_seleccionada || 'Central'}</span>
                       </span>
                     </div>
 
@@ -738,7 +780,7 @@ export default function AdminHistorialPage() {
               <DialogHeader className="border-b border-slate-150 pb-5">
                 <DialogTitle className="text-xl font-black uppercase text-slate-955 flex items-center gap-2 tracking-wide leading-none">
                   <Info className="w-6 h-6 text-[#cc0000]" />
-                  Detalle del Pedido: #{selectedPedido.id.substring(0, 8)}
+                  Detalle del Pedido: HAAS-${selectedPedido.id.slice(-6).toUpperCase()}
                 </DialogTitle>
                 <DialogDescription className="text-slate-500 text-xs mt-1.5 font-bold">
                   Consolidado el {new Date(selectedPedido.fecha_creacion).toLocaleString('es-BO', { timeZone: 'America/La_Paz' })}
@@ -809,8 +851,12 @@ export default function AdminHistorialPage() {
                       
                       <div className="space-y-3 mt-4 font-semibold text-sm">
                         <div className="flex justify-between items-baseline gap-2">
+                          <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Sucursal:</span>
+                          <span className="font-bold text-slate-950 text-sm md:text-base">{selectedPedido.sucursal_seleccionada || 'Central'}</span>
+                        </div>
+                        <div className="flex justify-between items-baseline gap-2">
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Tipo de Dirección:</span>
-                          <span className="font-bold text-slate-950 text-sm md:text-base">{selectedPedido.tipo_ubicacion || 'Casa'}</span>
+                          <span className="font-bold text-slate-955 text-sm md:text-base">{selectedPedido.tipo_ubicacion || 'Casa'}</span>
                         </div>
                         <div className="flex justify-between items-baseline gap-2">
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Dirección Completa:</span>

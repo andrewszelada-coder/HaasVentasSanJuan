@@ -35,7 +35,7 @@ interface PedidoItem {
 interface Pedido {
   id: string;
   total_bs: number;
-  estado: 'pendiente' | 'aprobado' | 'cancelado';
+  estado: 'pendiente' | 'aprobado' | 'cancelado' | 'preparando' | 'entregado';
   fecha_creacion: string;
   cupon_aplicado?: string;
   descuento_bs?: number;
@@ -317,7 +317,7 @@ export default function MiCuentaPage() {
                           return (
                             <TableRow key={pedido.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                               <TableCell className="font-mono text-[10px] text-slate-400 font-bold px-6">
-                                #{pedido.id.substring(0, 8).toUpperCase()}
+                                {'HAAS-' + pedido.id.slice(-6).toUpperCase()}
                               </TableCell>
                               <TableCell className="text-slate-600 text-xs font-mono font-semibold">
                                 {new Date(pedido.fecha_creacion).toLocaleDateString('es-BO', { 
@@ -345,14 +345,16 @@ export default function MiCuentaPage() {
                                 <Badge 
                                   variant="outline"
                                   className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
-                                    pedido.estado === 'aprobado'
+                                    pedido.estado === 'aprobado' || pedido.estado === 'entregado'
                                       ? 'bg-green-50 text-green-700 font-bold border border-green-200'
+                                      : pedido.estado === 'preparando'
+                                      ? 'bg-blue-50 text-blue-700 font-bold border border-blue-200'
                                       : pedido.estado === 'cancelado'
                                       ? 'bg-red-50 text-red-700 font-bold border border-red-200'
                                       : 'bg-yellow-50 text-yellow-700 font-bold border border-yellow-200'
                                   }`}
                                 >
-                                  {pedido.estado === 'aprobado' ? 'Confirmado' : pedido.estado === 'cancelado' ? 'Cancelado' : 'Pendiente'}
+                                  {pedido.estado === 'entregado' ? 'Entregado' : pedido.estado === 'preparando' ? 'Preparando' : pedido.estado === 'aprobado' ? 'Confirmado' : pedido.estado === 'cancelado' ? 'Cancelado' : 'Pendiente'}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right px-6">

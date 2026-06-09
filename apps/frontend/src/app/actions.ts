@@ -86,6 +86,8 @@ export async function loginAction(formData: FormData) {
 
   if (profile?.rol === 'admin') {
     redirect('/admin/pedidos');
+  } else if (profile?.rol === 'vendedor' || profile?.rol === 'sucursal') {
+    redirect('/admin/sucursal');
   } else {
     redirect('/reservas');
   }
@@ -412,12 +414,10 @@ export async function crearPedidoAction(
   }
 
   let serverDescuentoBs = 0;
-  if (cleanedFinanciero.cuponAplicado) {
-    if (cleanedFinanciero.cuponAplicado.toUpperCase() === 'SANJUAN10') {
-      serverDescuentoBs = subtotalBs * 0.10;
-    } else {
-      return { error: 'El cupón financiero aplicado no es válido en el servidor.' };
-    }
+  const today = new Date();
+  const limitDate = new Date('2026-06-15T23:59:59');
+  if (today <= limitDate) {
+    serverDescuentoBs = subtotalBs * 0.10;
   }
 
   const finalDescuentoBs = serverDescuentoBs;
@@ -439,9 +439,10 @@ export async function crearPedidoAction(
         longitud: cleanedLogistica.longitud,
         telefono_contacto: cleanedLogistica.telefono,
         indicaciones_entrega: cleanedLogistica.indicaciones,
-        cupon_aplicado: cleanedFinanciero.cuponAplicado || null,
+        cupon_aplicado: serverDescuentoBs > 0 ? 'AUTO_10' : null,
         descuento_bs: finalDescuentoBs,
-        metodo_pago: cleanedFinanciero.metodoPago,
+        metodo_pago: 'Transferencia QR',
+        sucursal_seleccionada: cleanedSucursalDestino,
         fecha_creacion: new Date().toISOString()
       }
     ])
@@ -549,23 +550,44 @@ export async function cancelarPedidoAction(pedidoId: string) {
   return { success: true };
 }
 
-export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado') {
+export async function actualizarEstadoPedidoAction(
+  pedidoId: string,
+  nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado' | 'preparando' | 'entregado'
+) {
   const cleanedId = clean(pedidoId);
   const cleanedEstado = clean(nuevoEstado);
   const supabase = await createClient();
 
-  if (!(await checkAdmin(supabase))) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'No autorizado. Debe iniciar sesión.' };
+
+  const { data: profile } = await supabase
+    .from('usuarios')
+    .select('rol, sucursal')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile) return { error: 'No autorizado. Usuario no registrado.' };
+
+  const isAdmin = profile.rol === 'admin';
+  const isSucursalManager = ['vendedor', 'sucursal'].includes(profile.rol);
+
+  if (!isAdmin && !isSucursalManager) {
     return { error: 'No autorizado. Permisos insuficientes.' };
   }
 
   const { data: pedido, error: fetchErr } = await supabase
     .from('pedidos')
-    .select('estado')
+    .select('estado, sucursal_seleccionada')
     .eq('id', cleanedId)
     .single();
 
   if (fetchErr || !pedido) {
-    return { error: 'El pedido no existe o no se pudo consultar.' };
+    return { error: 'El pedido no existe, no se pudo consultar o no tiene permisos sobre él.' };
+  }
+
+  if (isSucursalManager && profile.sucursal !== pedido.sucursal_seleccionada) {
+    return { error: 'No autorizado. Este pedido pertenece a otra sucursal.' };
   }
 
   const estadoAnterior = pedido.estado;
@@ -637,5 +659,6 @@ export async function actualizarEstadoPedidoAction(pedidoId: string, nuevoEstado
   }
 
   revalidatePath('/admin/pedidos');
+  revalidatePath('/admin/sucursal');
   return { success: true };
 }

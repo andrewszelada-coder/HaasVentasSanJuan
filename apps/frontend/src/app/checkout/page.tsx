@@ -29,6 +29,11 @@ interface CartItem {
   cantidad: number;
 }
 
+const QRS: Record<string, string> = {
+  "Super Haas Av. Heroínas Esq. Lanza": "https://xymvwsnyvpupejjcsuxz.supabase.co/storage/v1/object/public/qrs/qr_HeroinasHaas.jpg",
+  "Almacén Haas Av. América": "https://xymvwsnyvpupejjcsuxz.supabase.co/storage/v1/object/public/qrs/qr_americahaas.jpg"
+};
+
 export default function CheckoutStepperPage() {
   const supabase = createClient();
   const [currentStep, setCurrentStep] = useState(1);
@@ -50,24 +55,15 @@ export default function CheckoutStepperPage() {
   const [paisOrigen, setPaisOrigen] = useState('');
 
   // Paso 2: Logística y Entrega
-  const [direccion, setDireccion] = useState('');
-  const [tipoUbicacion, setTipoUbicacion] = useState('Casa');
+  const [sucursalRecojo, setSucursalRecojo] = useState('Super Haas Av. Heroínas Esq. Lanza');
   const [telefono, setTelefono] = useState('');
-  const [indicaciones, setIndicaciones] = useState('');
-  const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
-  const [gpsFailed, setGpsFailed] = useState(false);
-  const [leafletLoaded, setLeafletLoaded] = useState(false);
-  const [mapInstance, setMapInstance] = useState<any>(null);
-  const [markerInstance, setMarkerInstance] = useState<any>(null);
-  const mapRef = React.useRef<HTMLDivElement>(null);
-
+  
   // --- ESTADOS LOCALES PARA VALIDACIONES EN TIEMPO REAL (UX Inline) ---
   const [errorNombres, setErrorNombres] = useState('');
   const [errorApellidos, setErrorApellidos] = useState('');
   const [errorEmail, setErrorEmail] = useState('');
   const [errorNit, setErrorNit] = useState('');
   const [errorPaisOrigen, setErrorPaisOrigen] = useState('');
-  const [errorDireccion, setErrorDireccion] = useState('');
   const [errorTelefono, setErrorTelefono] = useState('');
 
   // --- FUNCIONES DE VALIDACIÓN ---
@@ -125,15 +121,6 @@ export default function CheckoutStepperPage() {
       return false;
     }
     setErrorPaisOrigen('');
-    return true;
-  };
-
-  const validateDireccion = (val: string) => {
-    if (!val.trim()) {
-      setErrorDireccion('La dirección de entrega es obligatoria.');
-      return false;
-    }
-    setErrorDireccion('');
     return true;
   };
 
@@ -198,143 +185,10 @@ export default function CheckoutStepperPage() {
     checkAuth();
   }, []);
 
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Tu navegador no soporta geolocalización. Entrada manual requerida.');
-      setGpsFailed(true);
-      return;
-    }
 
-    toast.info('Obteniendo ubicación actual...');
-    try {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const newLat = position.coords.latitude;
-          const newLng = position.coords.longitude;
-          setCoords({
-            lat: newLat,
-            lng: newLng
-          });
-          setGpsFailed(false);
-          toast.success('¡Ubicación satelital obtenida con éxito!');
-
-          if (mapInstance && markerInstance) {
-            mapInstance.setView([newLat, newLng], 16);
-            markerInstance.setLatLng([newLat, newLng]);
-          }
-        },
-        (error) => {
-          console.error('Error obteniendo ubicación:', error);
-          toast.error('Geolocalización denegada o no disponible. Activando entrada de dirección manual.');
-          setGpsFailed(true);
-          setCoords(null);
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    } catch (err) {
-      console.error('Exception in geolocation:', err);
-      setGpsFailed(true);
-      setCoords(null);
-    }
-  };
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if ((window as any).L) {
-      setLeafletLoaded(true);
-      return;
-    }
-
-    const linkId = 'leaflet-css';
-    if (!document.getElementById(linkId)) {
-      const link = document.createElement('link');
-      link.id = linkId;
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-
-    const scriptId = 'leaflet-js';
-    let script = document.getElementById(scriptId) as HTMLScriptElement;
-    if (!script) {
-      script = document.createElement('script');
-      script.id = scriptId;
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.async = true;
-      script.onload = () => {
-        setLeafletLoaded(true);
-      };
-      document.head.appendChild(script);
-    } else {
-      script.addEventListener('load', () => setLeafletLoaded(true));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!leafletLoaded || currentStep !== 2 || coords === null || !mapRef.current) return;
-
-    const L = (window as any).L;
-    if (!L) return;
-
-    const timer = setTimeout(() => {
-      if (!mapRef.current) return;
-
-      const mapDiv = mapRef.current;
-      if ((mapDiv as any)._leaflet_id) {
-        if (mapInstance && markerInstance) {
-          mapInstance.setView([coords.lat, coords.lng]);
-          markerInstance.setLatLng([coords.lat, coords.lng]);
-        }
-        return;
-      }
-
-      const map = L.map(mapRef.current, {
-        zoomControl: true,
-        attributionControl: false
-      }).setView([coords.lat, coords.lng], 16);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-      const redMarkerIcon = L.icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41]
-      });
-
-      const marker = L.marker([coords.lat, coords.lng], {
-        draggable: true,
-        icon: redMarkerIcon
-      }).addTo(map);
-
-      marker.on('dragend', () => {
-        const newLatLng = marker.getLatLng();
-        setCoords({ lat: newLatLng.lat, lng: newLatLng.lng });
-        toast.info(`Coordenadas actualizadas: ${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`);
-      });
-
-      map.on('click', (e: any) => {
-        marker.setLatLng(e.latlng);
-        setCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
-        toast.info(`Pin fijado en: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`);
-      });
-
-      setMapInstance(map);
-      setMarkerInstance(marker);
-
-      map.invalidateSize();
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [leafletLoaded, currentStep, coords === null]);
 
   // Paso 3: Pago y Cierre
-  const [cuponInput, setCuponInput] = useState('');
-  const [cuponAplicado, setCuponAplicado] = useState('');
-  const [descuentoBs, setDescuentoBs] = useState(0);
-  const [metodoPago, setMetodoPago] = useState('Transferencia QR');
+  const [metodoPago] = useState('Transferencia QR');
 
   useEffect(() => {
     const savedCart = localStorage.getItem('haas_cart');
@@ -345,19 +199,16 @@ export default function CheckoutStepperPage() {
     }
   }, []);
 
-  const subtotalBs = cart.reduce((sum, item) => sum + item.promotion.precio_bs * item.cantidad, 0);
-  const totalBs = Math.max(0, subtotalBs - descuentoBs);
-
-  const applyCoupon = () => {
-    if (cuponInput.toUpperCase() === 'SANJUAN10') {
-      const discount = subtotalBs * 0.10;
-      setDescuentoBs(discount);
-      setCuponAplicado('SANJUAN10');
-      toast.success('¡Cupón aplicado! Se ha descontado un 10% del total.');
-    } else {
-      toast.error('Cupón inválido. Intente con "SANJUAN10".');
-    }
+  const isAutoDiscountActive = () => {
+    const today = new Date();
+    const limitDate = new Date('2026-06-15T23:59:59');
+    return today <= limitDate;
   };
+
+  const subtotalBs = cart.reduce((sum, item) => sum + item.promotion.precio_bs * item.cantidad, 0);
+  const descuentoBs = isAutoDiscountActive() ? subtotalBs * 0.10 : 0;
+  const totalBs = Math.max(0, subtotalBs - descuentoBs);
+  const cuponAplicado = isAutoDiscountActive() ? 'AUTO_10' : '';
 
   // --- REGLAS DE BOTÓN DESACTIVADO DINÁMICO SEGÚN TIPO DE DOCUMENTO ---
   const isStep1Invalid = !nombres || !apellidos || !email || !numeroDocumento ||
@@ -366,7 +217,7 @@ export default function CheckoutStepperPage() {
                          !!errorNombres || !!errorApellidos || !!errorEmail || !!errorNit ||
                          (tipoDocumento === 'Carnet Extranjero' && !!errorPaisOrigen);
 
-  const isStep2Invalid = !direccion || !telefono || !!errorDireccion || !!errorTelefono;
+  const isStep2Invalid = !telefono || !!errorTelefono;
 
   const nextStep = () => {
     if (currentStep === 1) {
@@ -378,7 +229,7 @@ export default function CheckoutStepperPage() {
 
     if (currentStep === 2) {
       if (isStep2Invalid) {
-        toast.error('Por favor, ingrese su dirección completa y teléfono de contacto válidos.');
+        toast.error('Por favor, ingrese su teléfono de contacto válido.');
         return;
       }
     }
@@ -414,12 +265,12 @@ export default function CheckoutStepperPage() {
       };
 
       const logisticaPayload = {
-        tipoUbicacion: tipoUbicacion,
-        direccion: direccion,
-        latitud: coords ? coords.lat : -16.5001,
-        longitud: coords ? coords.lng : -68.1501,
+        tipoUbicacion: 'Sucursal',
+        direccion: 'Recojo en sucursal',
+        latitud: 0,
+        longitud: 0,
         telefono: telefono,
-        indicaciones: indicaciones || 'Compra directa de Invitado'
+        indicaciones: `Recojo en sucursal: ${sucursalRecojo}`
       };
 
       const financieroPayload = {
@@ -429,9 +280,9 @@ export default function CheckoutStepperPage() {
       };
 
       const result = await crearPedidoAction(
-        'Sucursal Central LPZ',
+        sucursalRecojo,
         '2026-06-23',
-        indicaciones || 'Entrega especial San Juan B2C',
+        `Recojo en sucursal: ${sucursalRecojo}`,
         itemsPayload,
         billingPayload,
         logisticaPayload,
@@ -449,9 +300,12 @@ export default function CheckoutStepperPage() {
           totalBs: totalBs,
           razonSocial: razonSocial || `${nombres} ${apellidos}`,
           nit: numeroDocumento,
-          direccion: direccion,
+          direccion: 'Recojo en sucursal',
           metodoPago: metodoPago,
-          email: email
+          email: email,
+          sucursalSeleccionada: sucursalRecojo,
+          celular: telefono,
+          detalleItems: cart.map(item => `${item.cantidad}x ${item.promotion.titulo}`).join(', ')
         };
         sessionStorage.setItem('haas_success_order', JSON.stringify(orderData));
         localStorage.removeItem('haas_cart');
@@ -464,8 +318,8 @@ export default function CheckoutStepperPage() {
 
   const stepHeaders = [
     { title: 'Identidad y Facturación', desc: 'Datos Personales', icon: <User className="w-4 h-4" /> },
-    { title: 'Logística y Entrega', desc: 'Ubicación y Mapas', icon: <MapPin className="w-4 h-4" /> },
-    { title: 'Pago y Cierre', desc: 'Cupón y Confirmación', icon: <CreditCard className="w-4 h-4" /> }
+    { title: 'Reserva y Recojo', desc: 'Sucursal y Contacto', icon: <MapPin className="w-4 h-4" /> },
+    { title: 'Pago y Cierre', desc: 'QR y Confirmación', icon: <CreditCard className="w-4 h-4" /> }
   ];
 
   return (
@@ -481,35 +335,43 @@ export default function CheckoutStepperPage() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 mt-8">
-        
-        {/* Stepper Indicator */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="max-w-5xl mx-auto px-6 mt-10">
+        {/* Stepper Header */}
+        <div className="grid grid-cols-3 gap-4 mb-10 select-none">
           {stepHeaders.map((step, idx) => {
             const stepNum = idx + 1;
             const isCompleted = currentStep > stepNum;
             const isActive = currentStep === stepNum;
-            
+
             return (
-              <div key={idx} className="space-y-2">
-                <div className={`h-1 rounded-full transition-all duration-300 ${
-                  isCompleted || isActive ? 'bg-[#cc0000]' : 'bg-slate-200'
-                }`} />
-                <div className="flex items-center gap-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    isCompleted 
-                      ? 'bg-[#cc0000] text-white shadow-sm' 
-                      : isActive 
-                      ? 'border-2 border-[#cc0000] text-[#cc0000] shadow-sm' 
-                      : 'border-2 border-slate-200 text-slate-400'
+              <div 
+                key={step.title}
+                className={`border rounded-2xl p-4 transition-all duration-300 flex items-center gap-3.5 bg-white ${
+                  isActive 
+                    ? 'border-[#cc0000] shadow-md shadow-[#cc0000]/5 scale-[1.01]' 
+                    : isCompleted 
+                    ? 'border-emerald-250 bg-emerald-50/20' 
+                    : 'border-slate-200 opacity-60'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                  isActive 
+                    ? 'bg-[#cc0000] text-white' 
+                    : isCompleted 
+                    ? 'bg-emerald-600 text-white' 
+                    : 'bg-slate-100 text-slate-400'
+                }`}>
+                  {isCompleted ? <Check className="w-4 h-4" /> : step.icon}
+                </div>
+                <div className="hidden md:block space-y-0.5">
+                  <span className={`block text-[10px] font-bold uppercase tracking-wider ${
+                    isActive ? 'text-[#cc0000]' : isCompleted ? 'text-emerald-700' : 'text-slate-400'
                   }`}>
-                    {isCompleted ? <Check className="w-3.5 h-3.5" /> : stepNum}
-                  </div>
-                  <div className="hidden md:block">
-                    <span className={`block text-xs font-bold leading-none ${
-                      isActive ? 'text-slate-900' : 'text-slate-400'
-                    }`}>{step.title}</span>
-                  </div>
+                    {step.desc}
+                  </span>
+                  <span className="block text-xs font-black text-slate-800 uppercase tracking-tight">
+                    {step.title}
+                  </span>
                 </div>
               </div>
             );
@@ -519,9 +381,9 @@ export default function CheckoutStepperPage() {
         {/* Form Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Left Side: Dynamic Step Form */}
+          {/* Left Side: Dynamic Forms */}
           <div className="lg:col-span-8">
-            <Card className="border border-slate-200 bg-white rounded-3xl overflow-hidden shadow-xl relative">
+            <Card className="border border-slate-200 bg-white rounded-3xl shadow-xl relative overflow-hidden p-6 md:p-8">
               <div className="h-[3px] bg-[#cc0000] absolute top-0 left-0 right-0" />
               
               <AnimatePresence mode="wait">
@@ -530,89 +392,59 @@ export default function CheckoutStepperPage() {
                   initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="p-6 md:p-8"
+                  transition={{ duration: 0.25, ease: 'easeInOut' }}
                 >
                   
                   {/* PASO 1: IDENTIDAD Y FACTURACIÓN */}
                   {currentStep === 1 && (
                     <div className="space-y-6">
                       <div className="space-y-1">
-                        <div className="flex justify-between items-center">
-                          <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Paso 1: Identidad y Facturación</h2>
-                          {hasSession ? (
-                            <span className="bg-emerald-500/10 text-emerald-700 text-[9px] font-black py-1 px-2.5 rounded-full uppercase tracking-wider border border-emerald-500/20">
-                              Socio Activo
-                            </span>
-                          ) : (
-                            <span className="bg-slate-100 text-slate-600 text-[9px] font-black py-1 px-2.5 rounded-full uppercase tracking-wider border border-slate-200">
-                              Invitado Activo
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 font-medium">Por favor, ingrese sus datos personales y tributarios de facturación para la reserva.</p>
+                        <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Paso 1: Identidad y Facturación</h2>
+                        <p className="text-xs text-slate-500 font-medium">Ingrese sus datos personales básicos para la emisión del comprobante y registro.</p>
                       </div>
 
-                      {hasSession ? (
-                        <div className="bg-emerald-50 border border-emerald-200/80 text-emerald-800 p-3.5 rounded-2xl flex items-center gap-3 text-xs font-semibold shadow-sm animate-fade-in">
-                          <Check className="w-5 h-5 text-emerald-600 shrink-0" />
-                          <span>Sesión de Socio Activa. Hemos autocompletado tus datos de facturación de fábrica.</span>
-                        </div>
-                      ) : (
-                        <div className="bg-[#cc0000]/5 border border-[#cc0000]/15 text-slate-900 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs font-medium shadow-sm animate-fade-in">
-                          <div className="space-y-0.5">
-                            <span className="block font-black text-slate-900 uppercase tracking-wide text-[10px] text-[#cc0000]">¿Ya eres Socio de Industrias Haas?</span>
-                            <span className="text-slate-500">Inicia sesión en tu cuenta para autocompletar tus datos de facturación y agilizar tu compra.</span>
-                          </div>
-                          <Link href="/login" className="bg-[#cc0000] hover:bg-[#a30000] text-white font-extrabold uppercase tracking-wider text-[10px] py-2 px-4 rounded-xl transition-all shadow-sm shadow-[#cc0000]/10 text-center shrink-0">
-                            Iniciar Sesión
-                          </Link>
-                        </div>
-                      )}
-
-                      <div className="space-y-4 pt-2">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="nombres" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Nombres *</Label>
-                            <Input
-                              id="nombres"
-                              value={nombres}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setNombres(val);
-                                validateNombres(val);
-                              }}
-                              placeholder="Juan"
-                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
-                                errorNombres ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
-                              }`}
-                            />
-                            {errorNombres && (
-                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorNombres}</p>
-                            )}
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="apellidos" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Apellidos *</Label>
-                            <Input
-                              id="apellidos"
-                              value={apellidos}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setApellidos(val);
-                                validateApellidos(val);
-                              }}
-                              placeholder="Pérez"
-                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
-                                errorApellidos ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
-                              }`}
-                            />
-                            {errorApellidos && (
-                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorApellidos}</p>
-                            )}
-                          </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="names" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Nombres *</Label>
+                          <Input
+                            id="names"
+                            value={nombres}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setNombres(val);
+                              validateNombres(val);
+                            }}
+                            placeholder="Juan"
+                            className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                              errorNombres ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                            }`}
+                          />
+                          {errorNombres && (
+                            <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorNombres}</p>
+                          )}
                         </div>
 
                         <div className="space-y-1.5">
+                          <Label htmlFor="lastNames" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Apellidos *</Label>
+                          <Input
+                            id="lastNames"
+                            value={apellidos}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setApellidos(val);
+                              validateApellidos(val);
+                            }}
+                            placeholder="Pérez"
+                            className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                              errorApellidos ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
+                            }`}
+                          />
+                          {errorApellidos && (
+                            <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorApellidos}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5 md:col-span-2">
                           <Label htmlFor="email" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Correo Electrónico *</Label>
                           <Input
                             id="email"
@@ -623,7 +455,7 @@ export default function CheckoutStepperPage() {
                               setEmail(val);
                               validateEmail(val);
                             }}
-                            placeholder="cliente@correo.com"
+                            placeholder="juan.perez@example.com"
                             className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
                               errorEmail ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
                             }`}
@@ -633,88 +465,83 @@ export default function CheckoutStepperPage() {
                           )}
                         </div>
 
-                        {/* --- SELECTOR DENSAMENTE DISEÑADO Y CAMPOS DINÁMICOS DE IDENTIDAD --- */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Tipo de Documento *</Label>
-                            <select
-                              value={tipoDocumento}
-                              onChange={e => handleTipoDocumentoChange(e.target.value)}
-                              className="w-full bg-white text-black border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none"
-                            >
-                              <option value="CI">Cédula de Identidad (C.I.)</option>
-                              <option value="NIT">Número de Identificación Tributaria (NIT)</option>
-                              <option value="Carnet Extranjero">Carnet Extranjero / Pasaporte</option>
-                            </select>
-                          </div>
-                          
-                          <div className="space-y-1.5">
-                            <Label htmlFor="docNum" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                              {tipoDocumento === 'CI' && 'Número de CI *'}
-                              {tipoDocumento === 'NIT' && 'Número de NIT *'}
-                              {tipoDocumento === 'Carnet Extranjero' && 'Número de Pasaporte/Carnet *'}
-                            </Label>
+                        {/* Tipo de Documento Selector */}
+                        <div className="space-y-1.5 flex flex-col">
+                          <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Tipo Documento *</Label>
+                          <select
+                            value={tipoDocumento}
+                            onChange={e => handleTipoDocumentoChange(e.target.value)}
+                            className="bg-white text-black border border-gray-300 rounded-lg p-2 text-sm focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none font-bold"
+                          >
+                            <option value="CI">Carnet de Identidad (CI)</option>
+                            <option value="NIT">Número de Identificación Tributaria (NIT)</option>
+                            <option value="Carnet Extranjero">Carnet de Extranjero</option>
+                          </select>
+                        </div>
+
+                        {/* Número Documento */}
+                        <div className="space-y-1.5">
+                          <Label htmlFor="nit" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                            {tipoDocumento === 'NIT' ? 'NIT *' : 'CI / Nro Documento *'}
+                          </Label>
+                          <div className="flex gap-2">
                             <Input
-                              id="docNum"
+                              id="nit"
                               value={numeroDocumento}
                               onChange={e => {
                                 const val = e.target.value;
                                 setNumeroDocumento(val);
                                 validateNit(val, tipoDocumento);
                               }}
-                              placeholder={
-                                tipoDocumento === 'CI' ? '1234567' : 
-                                tipoDocumento === 'NIT' ? '1020405060' : 'E-987654'
-                              }
-                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                              placeholder={tipoDocumento === 'NIT' ? '1020405060' : '8463524'}
+                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all flex-1 ${
                                 errorNit ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
                               }`}
                             />
-                            {errorNit && (
-                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorNit}</p>
+                            
+                            {/* Complemento de CI si aplica */}
+                            {tipoDocumento === 'CI' && (
+                              <Input
+                                value={complemento}
+                                onChange={e => setComplemento(e.target.value.toUpperCase())}
+                                placeholder="Comp (e.g. 1A)"
+                                maxLength={5}
+                                className="bg-white text-black border-gray-300 placeholder:text-gray-450 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm w-28 text-center font-bold"
+                              />
                             )}
                           </div>
+                          {errorNit && (
+                            <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorNit}</p>
+                          )}
                         </div>
 
-                        {/* Campos Condicionales Basados en el Tipo de Documento Seleccionado */}
-                        {tipoDocumento === 'CI' && (
-                          <div className="space-y-1.5 animate-fade-in">
-                            <Label htmlFor="complemento" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Complemento (Opcional)</Label>
-                            <Input
-                              id="complemento"
-                              value={complemento}
-                              onChange={e => setComplemento(e.target.value)}
-                              placeholder="Ej. 1B (si aplica)"
-                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
-                            />
-                          </div>
-                        )}
-
+                        {/* Razón Social Obligatoria para NIT */}
                         {tipoDocumento === 'NIT' && (
-                          <div className="space-y-1.5 animate-fade-in">
-                            <Label htmlFor="razon" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Razón Social *</Label>
+                          <div className="space-y-1.5 md:col-span-2">
+                            <Label htmlFor="company" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Razón Social *</Label>
                             <Input
-                              id="razon"
+                              id="company"
                               value={razonSocial}
                               onChange={e => setRazonSocial(e.target.value)}
-                              placeholder="Pérez Distribuciones S.R.L. o Consumidor Final"
-                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm"
+                              placeholder="Juan Pérez SRL"
+                              className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all"
                             />
                           </div>
                         )}
 
+                        {/* País de Origen Obligatorio para Extranjeros */}
                         {tipoDocumento === 'Carnet Extranjero' && (
-                          <div className="space-y-1.5 animate-fade-in">
-                            <Label htmlFor="paisOrigen" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">País de Origen *</Label>
+                          <div className="space-y-1.5 md:col-span-2">
+                            <Label htmlFor="country" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">País de Origen *</Label>
                             <Input
-                              id="paisOrigen"
+                              id="country"
                               value={paisOrigen}
                               onChange={e => {
                                 const val = e.target.value;
                                 setPaisOrigen(val);
                                 validatePaisOrigen(val, tipoDocumento);
                               }}
-                              placeholder="Ej. Alemania, Argentina, España..."
+                              placeholder="Argentina"
                               className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
                                 errorPaisOrigen ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
                               }`}
@@ -724,150 +551,51 @@ export default function CheckoutStepperPage() {
                             )}
                           </div>
                         )}
-
                       </div>
                     </div>
                   )}
 
-                  {/* PASO 2: LOGÍSTICA Y ENTREGA */}
+                  {/* PASO 2: RESERVA Y RECOJO */}
                   {currentStep === 2 && (
                     <div className="space-y-6">
                       <div className="space-y-1">
-                        <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Paso 2: Logística y Entrega</h2>
-                        <p className="text-xs text-slate-500 font-medium">Configure la dirección física exacta para el despacho de sus embutidos.</p>
+                        <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Paso 2: Reserva y Recojo</h2>
+                        <p className="text-xs text-slate-500 font-medium">Seleccione la sucursal física de su preferencia e ingrese su número celular de contacto.</p>
                       </div>
 
                       <div className="space-y-4">
+                        {/* Selector de Sucursal de Recojo */}
+                        <div className="space-y-1.5 flex flex-col">
+                          <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Sucursal de Recojo *</Label>
+                          <select
+                            value={sucursalRecojo}
+                            onChange={e => setSucursalRecojo(e.target.value)}
+                            className="w-full bg-white text-black border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none font-bold"
+                          >
+                            <option value="Super Haas Av. Heroínas Esq. Lanza">Super Haas Av. Heroínas Esq. Lanza</option>
+                            <option value="Almacén Haas Av. América">Almacén Haas Av. América</option>
+                          </select>
+                        </div>
+
                         <div className="space-y-1.5">
-                          <Label htmlFor="dir" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                            {gpsFailed ? '🔴 Dirección Manual de Entrega (Obligatorio) *' : 'Dirección completa *'}
-                          </Label>
+                          <Label htmlFor="tel" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Número Celular de Contacto *</Label>
                           <Input
-                            id="dir"
-                            value={direccion}
+                            id="tel"
+                            type="tel"
+                            value={telefono}
                             onChange={e => {
                               const val = e.target.value;
-                              setDireccion(val);
-                              validateDireccion(val);
+                              setTelefono(val);
+                              validateTelefono(val);
                             }}
-                            required
-                            placeholder={gpsFailed ? "Escriba detalladamente calle, número de puerta, edificio, zona..." : "Av. Arce, Edificio Multicentro, Nro. 1200"}
-                            className={`bg-white text-black placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
-                              errorDireccion || gpsFailed ? 'border-red-500 focus-visible:ring-red-500 focus-visible:border-red-500 ring-1 ring-red-100' : 'border-gray-300'
+                            placeholder="70012345"
+                            className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
+                              errorTelefono ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
                             }`}
                           />
-                          {errorDireccion && (
-                            <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorDireccion}</p>
+                          {errorTelefono && (
+                            <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorTelefono}</p>
                           )}
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Detalle opcional *</Label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                              {[
-                                { value: 'Casa', label: 'Casa', icon: <Home className="w-3.5 h-3.5 shrink-0" /> },
-                                { value: 'Departamento', label: 'Dep.', icon: <Building2 className="w-3.5 h-3.5 shrink-0" /> },
-                                { value: 'Oficina', label: 'Ofi.', icon: <Briefcase className="w-3.5 h-3.5 shrink-0" /> },
-                                { value: 'Condominio', label: 'Cond.', icon: <Building className="w-3.5 h-3.5 shrink-0" /> }
-                              ].map((opt) => {
-                                const isSelected = tipoUbicacion === opt.value;
-                                return (
-                                  <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => setTipoUbicacion(opt.value)}
-                                    className={`py-2.5 px-1 border rounded-lg transition-all font-bold text-[10px] uppercase text-center flex items-center justify-center gap-1 select-none cursor-pointer ${
-                                      isSelected 
-                                        ? 'border-[#cc0000] bg-[#cc0000]/5 text-slate-900 ring-1 ring-[#cc0000] shadow-sm font-black'
-                                        : 'border-slate-200 bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                                    }`}
-                                  >
-                                    {opt.icon}
-                                    <span>{opt.label}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="tel" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Teléfono de contacto *</Label>
-                            <Input
-                              id="tel"
-                              type="tel"
-                              value={telefono}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setTelefono(val);
-                                validateTelefono(val);
-                              }}
-                              placeholder="70012345"
-                              className={`bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg text-sm transition-all ${
-                                errorTelefono ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''
-                              }`}
-                            />
-                            {errorTelefono && (
-                              <p className="text-[10px] text-red-500 font-bold tracking-tight mt-0.5">{errorTelefono}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Interactive Geolocation & OpenStreetMap */}
-                        <div className="space-y-3 pt-2">
-                          <div className="flex flex-wrap justify-between items-center gap-2">
-                            <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                              🗺️ Ubicación Satelital de Entrega (Mapa Interactivo)
-                            </Label>
-                            <Button
-                              type="button"
-                              onClick={handleGetLocation}
-                              className="bg-[#cc0000] hover:bg-[#a30000] text-white text-[10px] font-black uppercase tracking-wider py-1.5 px-3 rounded-lg flex items-center gap-1 cursor-pointer select-none"
-                            >
-                              📍 Obtener mi ubicación actual
-                            </Button>
-                          </div>
-
-                          {coords === null || gpsFailed ? (
-                            <div className="w-full h-64 bg-slate-100 rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-red-300 text-gray-500 p-6 text-center">
-                              <Map className="w-8 h-8 text-red-500 mb-2 animate-pulse" />
-                              <span className="text-xs font-bold text-slate-800 mb-1">
-                                {gpsFailed 
-                                  ? 'Acceso GPS Denegado o Fallido' 
-                                  : 'Ubicación GPS Requerida'}
-                              </span>
-                              <span className="text-[10px] text-slate-500 max-w-xs leading-relaxed font-medium">
-                                {gpsFailed 
-                                  ? 'La geolocalización satelital no está disponible. Por favor, asegúrese de ingresar su Dirección Manual de forma detallada arriba.' 
-                                  : 'Haga clic en el botón superior para obtener sus coordenadas de entrega exactas.'}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="w-full h-64 mt-4 rounded-xl overflow-hidden border-2 border-gray-200 shadow-inner relative">
-                              {leafletLoaded ? (
-                                <div ref={mapRef} className="w-full h-full min-h-[256px]" />
-                              ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-slate-50">
-                                  <Loader2 className="w-8 h-8 animate-spin text-[#cc0000] mb-2" />
-                                  <span className="text-xs font-bold text-slate-800">Cargando OpenStreetMap interactivo...</span>
-                                </div>
-                              )}
-                              <div className="absolute bottom-2 right-2 bg-white px-2.5 py-1.5 rounded-lg shadow-md text-[10px] font-black text-slate-700 font-mono z-[1000]">
-                                Lat: {coords.lat.toFixed(6)}, Lng: {coords.lng.toFixed(6)}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <Label htmlFor="ind" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Indicaciones Adicionales</Label>
-                          <textarea
-                            id="ind"
-                            rows={2}
-                            value={indicaciones}
-                            onChange={e => setIndicaciones(e.target.value)}
-                            placeholder="Ej. Tocar el timbre rojo, dejar en portería, portón metálico gris..."
-                            className="w-full bg-white text-black border border-gray-300 rounded-lg p-2.5 text-sm placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none resize-none"
-                          />
                         </div>
                       </div>
                     </div>
@@ -878,67 +606,31 @@ export default function CheckoutStepperPage() {
                     <div className="space-y-6">
                       <div className="space-y-1">
                         <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Paso 3: Pago y Cierre</h2>
-                        <p className="text-xs text-slate-500 font-medium">Configure sus métodos de facturación financiera y confirme su pedido.</p>
+                        <p className="text-xs text-slate-500 font-medium">Realice el pago de su reserva escaneando el código QR correspondiente a la sucursal elegida.</p>
                       </div>
 
-                      {/* Coupon Box */}
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1 block">
-                          <BadgePercent className="w-3.5 h-3.5 text-[#cc0000]" /> ¿Tiene un Cupón de Descuento?
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="SANJUAN10"
-                            value={cuponInput}
-                            onChange={e => setCuponInput(e.target.value)}
-                            className="bg-white text-black border-gray-300 placeholder:text-gray-400 focus:ring-[#cc0000] focus:border-[#cc0000] rounded-lg max-w-[200px] text-sm"
+                      {/* QR de Pago Dinámico con URLs de Supabase Storage */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 text-center space-y-4 max-w-sm mx-auto shadow-sm animate-fade-in">
+                        <span className="block text-xs font-bold text-gray-900 uppercase tracking-wider">
+                          QR de Pago - Transferencia Bancaria
+                        </span>
+                        <div className="bg-white border-4 border-white p-4 rounded-2xl inline-block shadow-md">
+                          <img
+                            src={QRS[sucursalRecojo] || QRS["Super Haas Av. Heroínas Esq. Lanza"]}
+                            alt="QR de Pago"
+                            className="w-48 h-48 mx-auto object-contain rounded-xl"
                           />
-                          <Button
-                            type="button"
-                            onClick={applyCoupon}
-                            className="bg-[#cc0000] hover:bg-[#a30000] text-white text-xs font-bold uppercase rounded-lg cursor-pointer px-4"
-                          >
-                            Aplicar
-                          </Button>
                         </div>
-                        {cuponAplicado && (
-                          <span className="block text-[10px] text-[#cc0000] font-bold bg-[#cc0000]/10 border border-[#cc0000]/20 py-1 px-2.5 rounded-full w-max mt-2">
-                            Cupón SANJUAN10 Activo (-10% OFF aplicado)
+                        <div className="space-y-1.5">
+                          <span className="block text-[10px] text-emerald-600 font-bold uppercase tracking-wider bg-emerald-50 border border-emerald-100 rounded-full py-1 px-3 w-fit mx-auto">
+                            Pago 100% mediante QR a la sucursal seleccionada
                           </span>
-                        )}
-                      </div>
-
-                      {/* Payment Method Selector using Radio Cards */}
-                      <div className="space-y-3">
-                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                          Seleccione su Método de Pago *
-                        </Label>
-                        <div className="grid grid-cols-2 gap-4">
-                          <button
-                            type="button"
-                            onClick={() => setMetodoPago('Transferencia QR')}
-                            className={`p-4 border rounded-xl flex flex-col items-center justify-center gap-2.5 transition-all text-center cursor-pointer ${
-                              metodoPago === 'Transferencia QR' 
-                                ? 'border-[#cc0000] bg-[#cc0000]/5 text-slate-900 ring-1 ring-[#cc0000] shadow-sm' 
-                                : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                            }`}
-                          >
-                            <Landmark className="w-5 h-5 shrink-0 text-[#cc0000]" />
-                            <span className="font-bold text-xs uppercase tracking-wide">Transferencia QR</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setMetodoPago('Efectivo')}
-                            className={`p-4 border rounded-xl flex flex-col items-center justify-center gap-2.5 transition-all text-center cursor-pointer ${
-                              metodoPago === 'Efectivo' 
-                                ? 'border-[#cc0000] bg-[#cc0000]/5 text-slate-900 ring-1 ring-[#cc0000] shadow-sm' 
-                                : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                            }`}
-                          >
-                            <CreditCard className="w-5 h-5 shrink-0 text-[#cc0000]" />
-                            <span className="font-bold text-xs uppercase tracking-wide">Efectivo contra entrega</span>
-                          </button>
+                          <span className="block text-[10px] text-gray-500 font-bold">
+                            Sucursal de Recojo: {sucursalRecojo}
+                          </span>
+                          <span className="block text-sm font-black text-[#cc0000] font-mono">
+                            Monto a transferir: Bs. {totalBs.toFixed(2)}
+                          </span>
                         </div>
                       </div>
                     </div>

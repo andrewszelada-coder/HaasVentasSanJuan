@@ -45,3 +45,4 @@ fix_rls.js
 reload_schema.js
 test_trigger.js
 update_db_v3.js
+/*.js
