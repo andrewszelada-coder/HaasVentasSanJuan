@@ -25,6 +25,7 @@ interface CartItem {
     precio_bs: number;
     stock_disponible: number;
     imagen_url: string;
+    tipo_venta?: string;
   };
   cantidad: number;
 }
@@ -708,7 +709,9 @@ export default function CheckoutStepperPage() {
                       <div key={item.promotion.id} className="flex justify-between items-start text-xs border-b border-slate-100 pb-2.5 last:border-0 last:pb-0">
                         <div className="space-y-0.5 max-w-[70%]">
                           <span className="block font-bold text-slate-900 leading-tight">{item.promotion.titulo}</span>
-                          <span className="block text-[10px] text-slate-400 font-mono">Cantidad: {item.cantidad} combos</span>
+                          <span className="block text-[10px] text-slate-400 font-mono">
+                            Cantidad: {item.cantidad} {item.promotion.tipo_venta === 'A granel (Kg)' ? 'Kg' : 'combos'}
+                          </span>
                         </div>
                         <span className="font-bold font-mono text-[#cc0000] shrink-0">
                           Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}

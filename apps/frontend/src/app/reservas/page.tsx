@@ -19,6 +19,7 @@ interface Promotion {
   stock_disponible: number;
   imagen_url: string;
   activo: boolean;
+  tipo_venta?: string;
 }
 
 interface CartItem {
@@ -87,7 +88,8 @@ export default function ReservasPage() {
             precio_bs: Number(item.precio_bs),
             stock_disponible: Number(item.stock_disponible),
             imagen_url: customImg,
-            activo: item.activo
+            activo: item.activo,
+            tipo_venta: item.tipo_venta
           };
         });
         setPromociones(mapped);
@@ -208,13 +210,13 @@ export default function ReservasPage() {
     }
 
     saveCartToStorage(newCart);
-    toast.success(`Se agregaron ${qty} combo(s) a tu reserva.`);
+    toast.success(`Se agregaron ${qty} ${promo.tipo_venta === 'A granel (Kg)' ? 'Kg' : 'combo(s)'} a tu reserva.`);
   };
 
   const handleRemoveFromCart = (id: string) => {
     const newCart = cart.filter(item => item.promotion.id !== id);
     saveCartToStorage(newCart);
-    toast.info("Combo eliminado de la reserva.");
+    toast.info("Producto eliminado de la reserva.");
   };
 
   const handleUpdateCartQty = (id: string, newQty: number, stock: number) => {
@@ -419,8 +421,17 @@ export default function ReservasPage() {
 
                   <div className="space-y-4">
                     <div className="flex justify-between items-baseline pt-3 border-t border-slate-100">
-                      <span className="text-xs text-slate-400 font-mono">Precio por Kg:</span>
-                      <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)} / Kg</span>
+                      {promo.tipo_venta === 'A granel (Kg)' ? (
+                        <>
+                          <span className="text-xs text-slate-400 font-mono">Precio por Kg:</span>
+                          <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)} / Kg</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-slate-400 font-mono">Precio Unitario:</span>
+                          <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)}</span>
+                        </>
+                      )}
                     </div>
 
 
@@ -520,7 +531,7 @@ export default function ReservasPage() {
                     <span className="font-black text-slate-900 uppercase tracking-wider text-xs">Resumen de Reserva</span>
                   </div>
                   <span className="text-[10px] font-bold bg-[#cc0000]/10 border border-[#cc0000]/15 text-[#cc0000] px-2.5 py-0.5 rounded-full font-mono">
-                    {mounted ? cart.length : 0} combos
+                    {mounted ? cart.length : 0} {cart.length === 1 ? 'item' : 'items'}
                   </span>
                 </div>
 
@@ -531,7 +542,7 @@ export default function ReservasPage() {
                     </div>
                   ) : cart.length === 0 ? (
                     <div className="text-center py-8 text-slate-400 text-xs font-mono font-medium">
-                      No has añadido combos a tu reserva todavía.
+                      No has añadido productos a tu reserva todavía.
                     </div>
                   ) : (
                     cart.map(item => (
@@ -540,7 +551,7 @@ export default function ReservasPage() {
                           <div className="space-y-0.5">
                             <span className="block font-bold text-slate-900 text-xs leading-snug">{item.promotion.titulo}</span>
                             <span className="block text-[10px] text-slate-400 font-mono">
-                              Bs. {item.promotion.precio_bs.toFixed(2)} c/u
+                              Bs. {item.promotion.precio_bs.toFixed(2)} {item.promotion.tipo_venta === 'A granel (Kg)' ? '/ Kg' : 'c/u'}
                             </span>
                           </div>
                           <div className="flex items-center gap-2.5">
