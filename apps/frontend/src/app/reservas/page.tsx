@@ -414,13 +414,13 @@ export default function ReservasPage() {
                       Campaña San Juan
                     </span>
                     <h3 className="text-lg font-bold text-slate-950 mt-3 mb-1.5 leading-tight">{promo.titulo}</h3>
-                    <p className="text-slate-500 text-xs leading-relaxed mb-4 line-clamp-2 font-medium">{promo.descripcion}</p>
+                    <p className="text-slate-500 text-xs leading-relaxed mb-4 font-medium">{promo.descripcion}</p>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex justify-between items-baseline pt-3 border-t border-slate-100">
-                      <span className="text-xs text-slate-400 font-mono">Precio Unitario:</span>
-                      <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)}</span>
+                      <span className="text-xs text-slate-400 font-mono">Precio por Kg:</span>
+                      <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)} / Kg</span>
                     </div>
 
 
