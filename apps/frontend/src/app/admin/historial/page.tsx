@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   History, TrendingUp, CheckCircle2, XCircle, 
-  Loader2, Eye, FileSpreadsheet, MapPin, Receipt, Phone, Info, Calendar
+  Loader2, Eye, FileSpreadsheet, MapPin, Receipt, Phone, Info, Calendar, MessageSquare
 } from 'lucide-react';
 import {
   Select,
@@ -165,6 +165,34 @@ export default function AdminHistorialPage() {
       }
       setActionId(null);
     });
+  };
+
+  const openWhatsApp = (pedido: Pedido) => {
+    const phone = pedido.telefono_contacto || '';
+    if (!phone) {
+      toast.error("El cliente no registró número de contacto.");
+      return;
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    const formattedPhone = cleanPhone.startsWith('591') ? cleanPhone : `591${cleanPhone}`;
+    const codigoPedido = `HAAS-${pedido.id.slice(-6).toUpperCase()}`;
+    const sucursal = pedido.sucursal_seleccionada || 'Central';
+
+    const itemsSummary = pedido.pedido_items?.map(item => 
+      `• ${item.cantidad}x ${item.promociones_sanjuan?.titulo || 'Combo'}`
+    ).join('\n') || '';
+
+    const text = `¡Hola! 👋 Le escribimos de la sucursal *${sucursal}* de Industrias Haas para confirmar su reserva *${codigoPedido}*.
+
+📋 Detalle:
+${itemsSummary}
+
+💰 Total: Bs. ${Number(pedido.total_bs).toFixed(2)}
+
+Puede recoger su pedido entre el 19 y 20 de junio. Quedamos atentos. ¡Muchas gracias! 🙌`;
+
+    window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(text)}`, '_blank');
   };
 
   // Función de Exportación a Excel de Datos Filtrados
@@ -567,6 +595,16 @@ export default function AdminHistorialPage() {
                               Detalle
                             </Button>
 
+                            {/* WhatsApp Direct contact */}
+                            <Button
+                              onClick={() => openWhatsApp(pedido)}
+                              variant="outline"
+                              className="h-7 w-7 p-0 border-green-200 text-green-600 hover:bg-green-50 rounded-md cursor-pointer flex items-center justify-center shadow-sm transition-colors"
+                              title="Contactar Cliente"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </Button>
+
                             <div className="w-[125px] text-left">
                               <Select 
                                 value={pedido.estado} 
@@ -679,6 +717,17 @@ export default function AdminHistorialPage() {
                       >
                         <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
                         Ver Detalle
+                      </Button>
+
+                      {/* WhatsApp Direct contact */}
+                      <Button
+                        onClick={() => openWhatsApp(pedido)}
+                        variant="outline"
+                        className="border-green-200 text-green-600 hover:bg-green-50 text-xs py-1.5 px-3 h-8 rounded-lg font-semibold transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                        title="Contactar por WhatsApp"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        WhatsApp
                       </Button>
 
                       <div className="w-[130px]">
@@ -814,9 +863,22 @@ export default function AdminHistorialPage() {
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Contacto Email:</span>
                           <span className="font-bold text-slate-900 text-sm text-right truncate max-w-[60%]">{selectedPedido.usuarios?.email || 'Invitado'}</span>
                         </div>
-                        <div className="flex justify-between items-baseline gap-2">
+                        <div className="flex justify-between items-center gap-2">
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Teléfono WhatsApp:</span>
-                          <span className="font-extrabold text-emerald-600 font-mono select-all text-base">{selectedPedido.telefono_contacto || 'S/N'}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-emerald-600 font-mono select-all text-base">{selectedPedido.telefono_contacto || 'S/N'}</span>
+                            {selectedPedido.telefono_contacto && (
+                              <Button
+                                onClick={() => openWhatsApp(selectedPedido)}
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 border-green-200 text-green-600 hover:bg-green-50 rounded-md flex items-center gap-1 text-[10px] font-bold"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                Enviar Mensaje
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
