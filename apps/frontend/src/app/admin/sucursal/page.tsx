@@ -9,6 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
@@ -49,6 +56,7 @@ interface Pedido {
   };
   sucursal_seleccionada?: string;
   pedido_items?: PedidoItem[];
+  status_pago: boolean;
 }
 
 export default function SucursalDashboardPage() {
@@ -105,6 +113,36 @@ export default function SucursalDashboardPage() {
   useEffect(() => {
     loadProfileAndData();
   }, [dateFilter]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-sucursal-pedidos')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pedidos' },
+        (payload) => {
+          const updated = payload.new as any;
+          setPedidos(prev => 
+            prev.map(p => 
+              p.id === updated.id 
+                ? { ...p, estado: updated.estado, status_pago: updated.status_pago } 
+                : p
+            )
+          );
+          setSelectedPedido(prev => {
+            if (prev && prev.id === updated.id) {
+              return { ...prev, estado: updated.estado, status_pago: updated.status_pago };
+            }
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
 
   const handleStatusChange = (id: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado' | 'preparando' | 'entregado') => {
     setActionId(id);
@@ -385,6 +423,7 @@ ${itemsSummary}
                     <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Productos</TableHead>
                     <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Monto</TableHead>
                     <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Estado</TableHead>
+                    <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Estado Pago</TableHead>
                     <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider font-mono px-6">Acción Operativa</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -437,6 +476,18 @@ ${itemsSummary}
                             {pedido.estado === 'entregado' ? 'Entregado' : pedido.estado === 'preparando' ? 'Preparando' : pedido.estado === 'cancelado' ? 'Cancelado' : 'Pendiente'}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline"
+                            className={`text-[9px] font-bold py-0.5 px-2.5 rounded-full uppercase tracking-wider ${
+                              pedido.status_pago
+                                ? 'bg-green-50 text-green-700 border-green-200'
+                                : 'bg-red-50 text-red-700 border-red-200'
+                            }`}
+                          >
+                            {pedido.status_pago ? 'Pagado' : 'Pendiente'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-right px-6">
                           <div className="flex items-center justify-end gap-2">
                             {/* Ver detalle modal */}
@@ -453,49 +504,39 @@ ${itemsSummary}
                               <Eye className="w-4 h-4" />
                             </Button>
 
-                            {/* WhatsApp Direct contact */}
-                            <Button
-                              onClick={() => openWhatsApp(pedido)}
-                              variant="outline"
-                              size="sm"
-                              className="h-8 w-8 p-0 border-green-200 text-green-600 hover:bg-green-50 rounded-lg cursor-pointer"
-                              title="Contactar Cliente"
-                            >
-                              <MessageSquare className="w-4 h-4" />
-                            </Button>
-
                             {/* Quick Action transition */}
-                            {(pedido.estado === 'pendiente' || pedido.estado === 'aprobado') && (
-                              <Button
-                                onClick={() => handleStatusChange(pedido.id, 'preparando')}
-                                disabled={isUpdating}
-                                className="bg-[#cc0000] hover:bg-[#a30000] text-white text-[10px] font-bold uppercase tracking-wider h-8 px-3 rounded-lg shadow-sm active:scale-95 cursor-pointer disabled:opacity-40"
-                              >
-                                {isUpdating ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  'Preparar'
-                                )}
-                              </Button>
-                            )}
-
-                            {pedido.estado === 'preparando' && (
-                              <Button
-                                onClick={() => handleStatusChange(pedido.id, 'entregado')}
-                                disabled={isUpdating}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider h-8 px-3 rounded-lg shadow-sm active:scale-95 cursor-pointer disabled:opacity-40"
-                              >
-                                {isUpdating ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  'Entregar'
-                                )}
-                              </Button>
-                            )}
-
-                            {pedido.estado === 'entregado' && (
-                              <Badge className="bg-green-100 text-green-800 border-none rounded-lg h-8 px-3 flex items-center gap-1 text-[10px] font-bold uppercase select-none">
-                                <Check className="w-3.5 h-3.5" /> Entregado
+                            {pedido.estado !== 'cancelado' ? (
+                              <div className="w-[125px] text-left">
+                                <Select 
+                                  value={pedido.estado === 'entregado' ? 'entregado' : 'pendiente'} 
+                                  onValueChange={(value) => handleStatusChange(pedido.id, value as any)}
+                                  disabled={isPending && actionId === pedido.id}
+                                >
+                                  <SelectTrigger className="w-full h-8 text-[11px] font-bold border-slate-350 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                                    <SelectValue placeholder="Estado" />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
+                                    <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
+                                      <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-yellow-800 border border-yellow-300">
+                                        Pendiente
+                                      </span>
+                                    </SelectItem>
+                                    <SelectItem 
+                                      value="entregado" 
+                                      disabled={!pedido.status_pago}
+                                      className="cursor-pointer text-gray-900 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                                      title={!pedido.status_pago ? "Requiere pago" : ""}
+                                    >
+                                      <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
+                                        Entregado
+                                      </span>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : (
+                              <Badge className="bg-red-100 text-red-800 border-none rounded-lg h-8 px-3 flex items-center gap-1 text-[10px] font-bold uppercase select-none">
+                                Cancelado
                               </Badge>
                             )}
                           </div>
@@ -580,6 +621,12 @@ ${itemsSummary}
                       <span className="text-slate-500">Método de Pago:</span>
                       <span className="font-bold text-slate-900">{selectedPedido.metodo_pago || 'Transferencia QR'}</span>
                     </div>
+                    <div className="flex justify-between border-b border-slate-200/40 pb-1.5">
+                      <span className="text-slate-500">Estado de Pago:</span>
+                      <span className={`font-bold uppercase tracking-wider ${selectedPedido.status_pago ? 'text-green-600' : 'text-red-600'}`}>
+                        {selectedPedido.status_pago ? 'Pagado' : 'Pendiente'}
+                      </span>
+                    </div>
                     <div className="space-y-1">
                       <span className="text-slate-500 block">Indicaciones / Sucursal de retiro:</span>
                       <span className="block font-medium text-slate-700 bg-white/80 border border-slate-200/40 rounded-lg p-2 font-mono text-[10px] leading-relaxed">
@@ -652,28 +699,35 @@ ${itemsSummary}
                   Cerrar
                 </Button>
 
-                {(selectedPedido.estado === 'pendiente' || selectedPedido.estado === 'aprobado') && (
-                  <Button
-                    onClick={() => {
-                      handleStatusChange(selectedPedido.id, 'preparando');
-                    }}
-                    disabled={isPending}
-                    className="bg-[#cc0000] hover:bg-[#a30000] text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg shadow-sm active:scale-95 cursor-pointer"
-                  >
-                    Marcar En Preparación
-                  </Button>
-                )}
-
-                {selectedPedido.estado === 'preparando' && (
-                  <Button
-                    onClick={() => {
-                      handleStatusChange(selectedPedido.id, 'entregado');
-                    }}
-                    disabled={isPending}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg shadow-sm active:scale-95 cursor-pointer"
-                  >
-                    Marcar Entregado / Retirado
-                  </Button>
+                {selectedPedido.estado !== 'cancelado' && (
+                  <div className="w-[150px] text-left">
+                    <Select 
+                      value={selectedPedido.estado === 'entregado' ? 'entregado' : 'pendiente'} 
+                      onValueChange={(value) => handleStatusChange(selectedPedido.id, value as any)}
+                      disabled={isPending}
+                    >
+                      <SelectTrigger className="w-full h-9 text-xs font-bold border-slate-350 bg-white text-black shadow-sm flex items-center justify-between gap-1 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border border-slate-150 rounded-lg shadow-lg z-50">
+                        <SelectItem value="pendiente" className="cursor-pointer text-gray-900 font-bold">
+                          <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-800 border border-yellow-300">
+                            Pendiente
+                          </span>
+                        </SelectItem>
+                        <SelectItem 
+                          value="entregado" 
+                          disabled={!selectedPedido.status_pago}
+                          className="cursor-pointer text-gray-900 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={!selectedPedido.status_pago ? "Requiere pago" : ""}
+                        >
+                          <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-800 border border-green-300">
+                            Entregado
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
               </div>
             </>

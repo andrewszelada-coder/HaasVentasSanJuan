@@ -88,8 +88,8 @@ export default function CheckoutStepperPage() {
 
   const validateEmail = (val: string) => {
     if (!val) {
-      setErrorEmail('El correo electrónico es obligatorio.');
-      return false;
+      setErrorEmail('');
+      return true;
     }
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(val)) {
@@ -102,10 +102,10 @@ export default function CheckoutStepperPage() {
 
   const validateNit = (val: string, typeDoc: string) => {
     if (!val) {
-      setErrorNit('El número de documento es obligatorio.');
-      return false;
+      setErrorNit('');
+      return true;
     }
-    if (typeDoc.toUpperCase() === 'NIT') {
+    if (typeDoc && typeDoc.toUpperCase() === 'NIT') {
       const nitRegex = /^\d+$/;
       if (!nitRegex.test(val)) {
         setErrorNit('El número de NIT debe contener únicamente dígitos del 0 al 9 sin caracteres especiales.');
@@ -202,7 +202,7 @@ export default function CheckoutStepperPage() {
 
   const isAutoDiscountActive = () => {
     const today = new Date();
-    const limitDate = new Date('2026-06-15T23:59:59');
+    const limitDate = new Date('2026-06-17T23:59:59');
     return today <= limitDate;
   };
 
@@ -212,11 +212,10 @@ export default function CheckoutStepperPage() {
   const cuponAplicado = isAutoDiscountActive() ? 'AUTO_10' : '';
 
   // --- REGLAS DE BOTÓN DESACTIVADO DINÁMICO SEGÚN TIPO DE DOCUMENTO ---
-  const isStep1Invalid = !nombres || !apellidos || !email || !numeroDocumento ||
-                         (tipoDocumento === 'NIT' && !razonSocial) ||
-                         (tipoDocumento === 'Carnet Extranjero' && !paisOrigen) ||
+  const isStep1Invalid = !nombres || !apellidos ||
+                         (tipoDocumento === 'Carnet Extranjero' && numeroDocumento && !paisOrigen) ||
                          !!errorNombres || !!errorApellidos || !!errorEmail || !!errorNit ||
-                         (tipoDocumento === 'Carnet Extranjero' && !!errorPaisOrigen);
+                         (tipoDocumento === 'Carnet Extranjero' && numeroDocumento && !!errorPaisOrigen);
 
   const isStep2Invalid = !telefono || !!errorTelefono;
 
@@ -446,7 +445,7 @@ export default function CheckoutStepperPage() {
                         </div>
 
                         <div className="space-y-1.5 md:col-span-2">
-                          <Label htmlFor="email" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Correo Electrónico *</Label>
+                          <Label htmlFor="email" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Correo Electrónico (Opcional)</Label>
                           <Input
                             id="email"
                             type="email"
@@ -468,12 +467,13 @@ export default function CheckoutStepperPage() {
 
                         {/* Tipo de Documento Selector */}
                         <div className="space-y-1.5 flex flex-col">
-                          <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Tipo Documento *</Label>
+                          <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Tipo Documento (Opcional)</Label>
                           <select
                             value={tipoDocumento}
                             onChange={e => handleTipoDocumentoChange(e.target.value)}
                             className="bg-white text-black border border-gray-300 rounded-lg p-2 text-sm focus:ring-[#cc0000] focus:border-[#cc0000] focus:outline-none font-bold"
                           >
+                            <option value="">Sin Documento</option>
                             <option value="CI">Carnet de Identidad (CI)</option>
                             <option value="NIT">Número de Identificación Tributaria (NIT)</option>
                             <option value="Carnet Extranjero">Carnet de Extranjero</option>
@@ -482,8 +482,8 @@ export default function CheckoutStepperPage() {
 
                         {/* Número Documento */}
                         <div className="space-y-1.5">
-                          <Label htmlFor="nit" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                            {tipoDocumento === 'NIT' ? 'NIT *' : 'CI / Nro Documento *'}
+                           <Label htmlFor="nit" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                            {tipoDocumento === 'NIT' ? 'NIT (Opcional)' : tipoDocumento === 'CI' ? 'CI / Nro Documento (Opcional)' : 'Nro Documento (Opcional)'}
                           </Label>
                           <div className="flex gap-2">
                             <Input
@@ -516,10 +516,10 @@ export default function CheckoutStepperPage() {
                           )}
                         </div>
 
-                        {/* Razón Social Obligatoria para NIT */}
+                        {/* Razón Social para NIT */}
                         {tipoDocumento === 'NIT' && (
                           <div className="space-y-1.5 md:col-span-2">
-                            <Label htmlFor="company" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Razón Social *</Label>
+                            <Label htmlFor="company" className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Razón Social (Opcional)</Label>
                             <Input
                               id="company"
                               value={razonSocial}

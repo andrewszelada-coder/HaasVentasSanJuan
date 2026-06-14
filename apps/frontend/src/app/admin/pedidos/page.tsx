@@ -1,17 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useTransition } from 'react';
-import { getPedidos, actualizarEstadoPedidoAction } from '@/app/actions';
+import { getPedidos, actualizarEstadoPedidoAction, actualizarStatusPagoAction } from '@/app/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { createClient } from '@/lib/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { 
   ClipboardList, TrendingUp, Anchor, CheckCircle2, XCircle, 
-  Loader2, Eye, FileSpreadsheet, MapPin, Receipt, Phone, Info
+  Loader2, Eye, FileSpreadsheet, MapPin, Receipt, Phone, Info, MessageSquare
 } from 'lucide-react';
 import {
   Select,
@@ -56,6 +58,7 @@ interface Pedido {
   };
   sucursal_seleccionada?: string;
   pedido_items?: PedidoItem[];
+  status_pago: boolean;
 }
 
 export default function AdminPedidosPage() {
@@ -92,27 +95,81 @@ export default function AdminPedidosPage() {
     loadData();
   }, []);
 
-  const handleStatusChange = (id: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado') => {
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('realtime-admin-pedidos')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pedidos' },
+        (payload) => {
+          const updated = payload.new as any;
+          setPedidos(prev => 
+            prev.map(p => 
+              p.id === updated.id 
+                ? { ...p, estado: updated.estado, status_pago: updated.status_pago } 
+                : p
+            )
+          );
+          setSelectedPedido(prev => {
+            if (prev && prev.id === updated.id) {
+              return { ...prev, estado: updated.estado, status_pago: updated.status_pago };
+            }
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleStatusChange = (id: string, nuevoEstado: 'pendiente' | 'aprobado' | 'cancelado' | 'preparando' | 'entregado') => {
     setActionId(id);
     startTransition(async () => {
       try {
-        const result = await actualizarEstadoPedidoAction(id, nuevoEstado);
+        const result = await actualizarEstadoPedidoAction(id, nuevoEstado as any);
         if (result && result.error) {
           toast.error(`Error de Base de Datos: ${result.error}`);
         } else {
           const readableState = nuevoEstado === 'aprobado' ? 'Realizado' : nuevoEstado === 'cancelado' ? 'Rechazado' : 'Pendiente';
           toast.success(`Estado de la reserva cambiado a "${readableState}" con éxito.`);
           
-          // Actualización de estado local reactivo inmediato (BUG 1)
-          setPedidos(prevPedidos => prevPedidos.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p));
+          setPedidos(prevPedidos => prevPedidos.map(p => p.id === id ? { ...p, estado: nuevoEstado as any } : p));
           
-          // Si el modal de detalles está abierto para este mismo pedido, actualizar la vista
           if (selectedPedido && selectedPedido.id === id) {
-            setSelectedPedido(prev => prev ? { ...prev, estado: nuevoEstado } : null);
+            setSelectedPedido(prev => prev ? { ...prev, estado: nuevoEstado as any } : null);
           }
         }
       } catch (err: any) {
         toast.error(`Error crítico al cambiar estado: ${err?.message || 'Error de conexión'}`);
+      } finally {
+        setActionId(null);
+      }
+    });
+  };
+
+  const handleTogglePago = (id: string, nuevoStatusPago: boolean) => {
+    setActionId(id);
+    startTransition(async () => {
+      try {
+        const result = await actualizarStatusPagoAction(id, nuevoStatusPago);
+        if (result && result.error) {
+          toast.error(`Error al actualizar pago: ${result.error}`);
+        } else {
+          toast.success(`Estado de pago actualizado a ${nuevoStatusPago ? 'Pagado' : 'Pendiente'}`);
+          setPedidos(prev => prev.map(p => p.id === id ? { ...p, status_pago: nuevoStatusPago } : p));
+          setSelectedPedido(prev => {
+            if (prev && prev.id === id) {
+              return { ...prev, status_pago: nuevoStatusPago };
+            }
+            return prev;
+          });
+        }
+      } catch (err: any) {
+        toast.error(`Error crítico: ${err?.message || 'Error de conexión'}`);
       } finally {
         setActionId(null);
       }
@@ -147,6 +204,34 @@ export default function AdminPedidosPage() {
       }
       setActionId(null);
     });
+  };
+
+  const openWhatsApp = (pedido: Pedido) => {
+    const phone = pedido.telefono_contacto || '';
+    if (!phone) {
+      toast.error("El cliente no registró número de contacto.");
+      return;
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    const formattedPhone = cleanPhone.startsWith('591') ? cleanPhone : `591${cleanPhone}`;
+    const codigoPedido = `HAAS-${pedido.id.slice(-6).toUpperCase()}`;
+    const sucursal = pedido.sucursal_seleccionada || 'Central';
+
+    const itemsSummary = pedido.pedido_items?.map(item => 
+      `• ${item.cantidad}x ${item.promociones_sanjuan?.titulo || 'Combo'}`
+    ).join('\n') || '';
+
+    const text = `¡Hola! 👋 Le escribimos de la sucursal *${sucursal}* de Industrias Haas para confirmar su reserva *${codigoPedido}*.
+
+📋 Detalle:
+${itemsSummary}
+
+💰 Total: Bs. ${Number(pedido.total_bs).toFixed(2)}
+
+Puede recoger su pedido entre el 19 y 20 de junio. Quedamos atentos. ¡Muchas gracias! 🙌`;
+
+    window.open(`https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(text)}`, '_blank');
   };
 
   // Función de Exportación a Excel (HTML XML con Formato Corporativo)
@@ -438,6 +523,7 @@ export default function AdminPedidosPage() {
                       <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Sucursal</TableHead>
                       <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Monto Total</TableHead>
                       <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Estado</TableHead>
+                      <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Pago</TableHead>
                       <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Fecha</TableHead>
                       <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Acciones</TableHead>
                     </TableRow>
@@ -480,6 +566,25 @@ export default function AdminPedidosPage() {
                             {pedido.estado === 'entregado' ? 'Entregado' : pedido.estado === 'preparando' ? 'Preparando' : pedido.estado === 'aprobado' ? 'Realizado' : pedido.estado === 'cancelado' ? 'Rechazado' : 'Pendiente'}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={pedido.status_pago || false}
+                              disabled={isPending && actionId === pedido.id}
+                              onCheckedChange={(checked) => handleTogglePago(pedido.id, checked)}
+                            />
+                            <Badge 
+                              variant="outline"
+                              className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
+                                pedido.status_pago
+                                  ? 'bg-green-100 text-green-800 border-green-300'
+                                  : 'bg-red-100 text-red-800 border-red-300'
+                              }`}
+                            >
+                              {pedido.status_pago ? 'Pagado' : 'Pendiente'}
+                            </Badge>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-slate-400 font-mono text-[10px] font-semibold">
                           {new Date(pedido.fecha_creacion).toLocaleDateString('es-BO', {
                             day: '2-digit',
@@ -500,6 +605,16 @@ export default function AdminPedidosPage() {
                             >
                               <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
                               Detalle
+                            </Button>
+
+                            {/* WhatsApp Direct contact */}
+                            <Button
+                              onClick={() => openWhatsApp(pedido)}
+                              variant="outline"
+                              className="h-7 w-7 p-0 border-green-200 text-green-600 hover:bg-green-50 rounded-md cursor-pointer flex items-center justify-center shadow-sm transition-colors"
+                              title="Contactar Cliente"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
                             </Button>
 
                             {/* Selector de Estado Interactivo */}
@@ -583,6 +698,24 @@ export default function AdminPedidosPage() {
                       <span className="block text-[10px] text-slate-500 font-medium">
                         Sucursal: <span className="font-bold text-slate-700">{pedido.sucursal_seleccionada || 'Central'}</span>
                       </span>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[10px] text-slate-500 font-medium">Pago:</span>
+                        <Switch
+                          checked={pedido.status_pago || false}
+                          disabled={isPending && actionId === pedido.id}
+                          onCheckedChange={(checked) => handleTogglePago(pedido.id, checked)}
+                        />
+                        <Badge 
+                          variant="outline"
+                          className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
+                            pedido.status_pago
+                              ? 'bg-green-100 text-green-800 border-green-300'
+                              : 'bg-red-100 text-red-800 border-red-300'
+                          }`}
+                        >
+                          {pedido.status_pago ? 'Pagado' : 'Pendiente'}
+                        </Badge>
+                      </div>
                     </div>
 
                     <div className="flex justify-between items-center pt-2 border-t border-slate-100">
@@ -616,6 +749,17 @@ export default function AdminPedidosPage() {
                       >
                         <Eye className="w-3.5 h-3.5 text-[#cc0000]" />
                         Ver Detalle
+                      </Button>
+
+                      {/* WhatsApp Direct contact */}
+                      <Button
+                        onClick={() => openWhatsApp(pedido)}
+                        variant="outline"
+                        className="border-green-200 text-green-600 hover:bg-green-50 text-xs py-1.5 px-3 h-8 rounded-lg font-semibold transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                        title="Contactar por WhatsApp"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        WhatsApp
                       </Button>
 
                       {/* Selector de Estado */}
@@ -753,9 +897,22 @@ export default function AdminPedidosPage() {
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Contacto Email:</span>
                           <span className="font-bold text-slate-900 text-sm text-right truncate max-w-[60%]">{selectedPedido.usuarios?.email || 'Invitado'}</span>
                         </div>
-                        <div className="flex justify-between items-baseline gap-2">
+                        <div className="flex justify-between items-center gap-2">
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Teléfono WhatsApp:</span>
-                          <span className="font-extrabold text-emerald-600 font-mono select-all text-base">{selectedPedido.telefono_contacto || 'S/N'}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-emerald-600 font-mono select-all text-base">{selectedPedido.telefono_contacto || 'S/N'}</span>
+                            {selectedPedido.telefono_contacto && (
+                              <Button
+                                onClick={() => openWhatsApp(selectedPedido)}
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 border-green-200 text-green-600 hover:bg-green-50 rounded-md flex items-center gap-1 text-[10px] font-bold"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                Enviar Mensaje
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -768,6 +925,26 @@ export default function AdminPedidosPage() {
                         <div className="flex justify-between items-baseline gap-2">
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Método de Pago:</span>
                           <span className="font-bold text-slate-950 text-sm">{selectedPedido.metodo_pago || 'Transferencia QR'}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-2 border-t border-slate-200/40 pt-2">
+                          <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Estado de Pago:</span>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={selectedPedido.status_pago || false}
+                              disabled={isPending && actionId === selectedPedido.id}
+                              onCheckedChange={(checked) => handleTogglePago(selectedPedido.id, checked)}
+                            />
+                            <Badge 
+                              variant="outline"
+                              className={`text-[9px] font-bold py-0.5 px-2 rounded-full uppercase tracking-wider ${
+                                selectedPedido.status_pago
+                                  ? 'bg-green-100 text-green-800 border-green-300'
+                                  : 'bg-red-100 text-red-800 border-red-300'
+                              }`}
+                            >
+                              {selectedPedido.status_pago ? 'Pagado' : 'Pendiente'}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="flex justify-between items-baseline gap-2">
                           <span className="text-slate-500 text-xs uppercase tracking-wider font-mono">Cupón Aplicado:</span>

@@ -355,8 +355,8 @@ export async function crearPedidoAction(
     return { error: 'El número de teléfono de contacto debe comenzar con 6 o 7 y tener exactamente 8 dígitos.' };
   }
 
-  // NIT: Asegura que solo contenga números y no caracteres especiales (en caso de que el tipo de documento sea NIT)
-  if (cleanedBilling.tipoDoc.toUpperCase() === 'NIT') {
+  // NIT: Asegura que solo contenga números y no caracteres especiales (en caso de que el tipo de documento sea NIT y esté ingresado)
+  if (cleanedBilling.numeroDoc && cleanedBilling.tipoDoc && cleanedBilling.tipoDoc.toUpperCase() === 'NIT') {
     if (typeof cleanedBilling.numeroDoc !== 'string') {
       return { error: 'El número de NIT debe ser una cadena de texto.' };
     }
@@ -415,7 +415,7 @@ export async function crearPedidoAction(
 
   let serverDescuentoBs = 0;
   const today = new Date();
-  const limitDate = new Date('2026-06-15T23:59:59');
+  const limitDate = new Date('2026-06-17T23:59:59');
   if (today <= limitDate) {
     serverDescuentoBs = subtotalBs * 0.10;
   }
@@ -578,7 +578,7 @@ export async function actualizarEstadoPedidoAction(
 
   const { data: pedido, error: fetchErr } = await supabase
     .from('pedidos')
-    .select('estado, sucursal_seleccionada')
+    .select('estado, sucursal_seleccionada, status_pago')
     .eq('id', cleanedId)
     .single();
 
@@ -588,6 +588,11 @@ export async function actualizarEstadoPedidoAction(
 
   if (isSucursalManager && profile.sucursal !== pedido.sucursal_seleccionada) {
     return { error: 'No autorizado. Este pedido pertenece a otra sucursal.' };
+  }
+
+  // Restricción de entrega si no está pagado
+  if (isSucursalManager && !pedido.status_pago && cleanedEstado === 'entregado') {
+    return { error: 'No se puede entregar un pedido que no ha sido pagado (status_pago es false).' };
   }
 
   const estadoAnterior = pedido.estado;
@@ -652,6 +657,37 @@ export async function actualizarEstadoPedidoAction(
   const { error: updateErr } = await supabase
     .from('pedidos')
     .update({ estado: cleanedEstado })
+    .eq('id', cleanedId);
+
+  if (updateErr) {
+    return { error: updateErr.message };
+  }
+
+  revalidatePath('/admin/pedidos');
+  revalidatePath('/admin/sucursal');
+  return { success: true };
+}
+
+export async function actualizarStatusPagoAction(pedidoId: string, statusPago: boolean) {
+  const cleanedId = clean(pedidoId);
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'No autorizado. Debe iniciar sesión.' };
+
+  const { data: profile } = await supabase
+    .from('usuarios')
+    .select('rol')
+    .eq('id', user.id)
+    .single();
+
+  if (profile?.rol !== 'admin') {
+    return { error: 'No autorizado. Solo el Administrador de fábrica puede modificar el estado de pago.' };
+  }
+
+  const { error: updateErr } = await supabase
+    .from('pedidos')
+    .update({ status_pago: statusPago })
     .eq('id', cleanedId);
 
   if (updateErr) {
