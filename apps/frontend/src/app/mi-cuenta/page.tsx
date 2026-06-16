@@ -156,7 +156,7 @@ export default function MiCuentaPage() {
   const whatsappMsg = encodeURIComponent(
     `Hola Industrias Haas, soy ${customerName}. Necesito asistencia sobre mis pedidos de preventa San Juan 2026.`
   );
-  const whatsappUrl = `https://wa.me/59170012345?text=${whatsappMsg}`;
+  const whatsappUrl = `https://wa.me/59167405585?text=${whatsappMsg}`;
 
   // UX B2B premium: Agrega dinámicamente los mismos ítems del pedido al carrito
   const handleReorder = (pedido: Pedido) => {

@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 // =========================================================================
 // CONFIGURACIÓN DE PUNTOS DE CONTACTO
 // =========================================================================
-const NUMERO_WHATSAPP = "59170000000"; // Reemplazar con el número real de Haas
+const NUMERO_WHATSAPP = "59167405585"; // Celular real de Haas para comprobantes/contacto
 
 interface OrderData {
   orderId: string;
