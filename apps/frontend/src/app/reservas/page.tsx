@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Flame, LogOut, ShoppingBag, Plus, Minus, Lock, Trash2, ArrowRight, FlameKindling, CalendarCheck, ShieldCheck, User } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import { TarjetaProducto } from '@/components/TarjetaProducto';
 
 interface Promotion {
   id: string;
@@ -27,11 +28,133 @@ interface CartItem {
   cantidad: number;
 }
 
+const CartItemSelector = ({
+  item,
+  onUpdateQty,
+  onRemove
+}: {
+  item: CartItem;
+  onUpdateQty: (qty: number) => void;
+  onRemove: () => void;
+}) => {
+  const isGranel = item.promotion.tipo_venta === 'A granel (Kg)';
+  const [inputValue, setInputValue] = useState(
+    isGranel ? item.cantidad.toFixed(1) : item.cantidad.toString()
+  );
+
+  useEffect(() => {
+    setInputValue(isGranel ? item.cantidad.toFixed(1) : item.cantidad.toString());
+  }, [item.cantidad, isGranel]);
+
+  const step = isGranel ? 0.5 : 1;
+  const minQty = isGranel ? 0.5 : 1;
+
+  const handleBlur = () => {
+    let parsed = isGranel ? parseFloat(inputValue) : parseInt(inputValue, 10);
+    if (isNaN(parsed) || parsed < minQty) {
+      parsed = minQty;
+    } else {
+      parsed = isGranel ? Math.round(parsed / 0.5) * 0.5 : Math.round(parsed);
+    }
+    if (parsed > item.promotion.stock_disponible) {
+      parsed = item.promotion.stock_disponible;
+      toast.warning("Stock máximo alcanzado");
+    }
+    setInputValue(isGranel ? parsed.toFixed(1) : parsed.toString());
+    onUpdateQty(parsed);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (isGranel) {
+      const normalized = val.replace(',', '.');
+      if (/^\d*\.?\d*$/.test(normalized)) {
+        setInputValue(normalized);
+        const parsed = parseFloat(normalized);
+        if (!isNaN(parsed) && parsed >= minQty && parsed <= item.promotion.stock_disponible) {
+          onUpdateQty(parsed);
+        }
+      }
+    } else {
+      const normalized = val.replace(/[^0-9]/g, '');
+      setInputValue(normalized);
+      const parsed = parseInt(normalized, 10);
+      if (!isNaN(parsed) && parsed >= minQty && parsed <= item.promotion.stock_disponible) {
+        onUpdateQty(parsed);
+      }
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+      <div className="flex justify-between items-start gap-4">
+        <div className="space-y-0.5">
+          <span className="block font-bold text-slate-900 text-xs leading-snug">{item.promotion.titulo}</span>
+          <span className="block text-[10px] text-slate-400 font-mono">
+            Bs. {item.promotion.precio_bs.toFixed(2)} {isGranel ? '/ Kg' : 'c/u'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <span className="font-bold font-mono text-xs text-[#cc0000]">
+            Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}
+          </span>
+          <button
+            onClick={onRemove}
+            className="text-slate-300 hover:text-red-600 transition-colors"
+            title="Eliminar combo"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center border border-slate-200 rounded bg-slate-50 w-fit">
+        <button
+          type="button"
+          onClick={() => {
+            const parsed = parseFloat(inputValue) || 0;
+            const next = Math.max(minQty, parsed - step);
+            setInputValue(isGranel ? next.toFixed(1) : next.toString());
+            onUpdateQty(next);
+          }}
+          className="px-2 py-1 hover:bg-slate-100 text-slate-500 transition-colors"
+        >
+          <Minus className="w-2.5 h-2.5" />
+        </button>
+        <input
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          className="w-10 text-center text-[10px] font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none p-0 h-6"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const parsed = parseFloat(inputValue) || 0;
+            const next = parsed + step;
+            if (next > item.promotion.stock_disponible) {
+              toast.warning("Stock máximo alcanzado");
+              setInputValue(isGranel ? item.promotion.stock_disponible.toFixed(1) : item.promotion.stock_disponible.toString());
+              onUpdateQty(item.promotion.stock_disponible);
+            } else {
+              setInputValue(isGranel ? next.toFixed(1) : next.toString());
+              onUpdateQty(next);
+            }
+          }}
+          className="px-2 py-1 hover:bg-slate-100 text-slate-550 transition-colors"
+        >
+          <Plus className="w-2.5 h-2.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function ReservasPage() {
   const supabase = createClient();
   const [promociones, setPromociones] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isPending, startTransition] = useTransition();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -93,13 +216,6 @@ export default function ReservasPage() {
           };
         });
         setPromociones(mapped);
-        
-        // Inicializar cantidades de compra por ID
-        const initialQuantities: Record<string, number> = {};
-        mapped.forEach(p => {
-          initialQuantities[p.id] = 1;
-        });
-        setQuantities(initialQuantities);
       } catch (err) {
         toast.error("Error al cargar promociones del catálogo.");
       } finally {
@@ -152,43 +268,7 @@ export default function ReservasPage() {
     localStorage.setItem('haas_cart', JSON.stringify(newCart));
   };
 
-  const handleIncrement = (id: string, stock: number) => {
-    setQuantities(prev => {
-      const current = prev[id] || 1;
-      if (current >= stock) {
-        toast.warning("Stock máximo alcanzado");
-        return { ...prev, [id]: stock };
-      }
-      return { ...prev, [id]: current + 1 };
-    });
-  };
-
-  const handleDecrement = (id: string) => {
-    setQuantities(prev => {
-      const current = prev[id] || 1;
-      return { ...prev, [id]: Math.max(1, current - 1) };
-    });
-  };
-
-  const handleQuantityChange = (id: string, valueStr: string, stock: number) => {
-    const cleanStr = valueStr.replace(/[^0-9]/g, '');
-    let val = parseInt(cleanStr, 10);
-    if (isNaN(val) || val < 1) {
-      val = 1;
-    }
-    if (val > stock) {
-      val = stock;
-      toast.warning("Stock máximo alcanzado");
-    }
-    setQuantities(prev => ({
-      ...prev,
-      [id]: val
-    }));
-  };
-
-  const handleAddToCart = (promo: Promotion) => {
-    const qty = quantities[promo.id] || 1;
-    
+  const handleAddToCart = (promo: Promotion, qty: number) => {
     // Validar stock (Condición Crítica QA)
     if (qty > promo.stock_disponible) {
       toast.error(`Stock Insuficiente: Solicitado ${qty}, disponible ${promo.stock_disponible}`);
@@ -220,11 +300,22 @@ export default function ReservasPage() {
   };
 
   const handleUpdateCartQty = (id: string, newQty: number, stock: number) => {
+    const cartItem = cart.find(item => item.promotion.id === id);
+    const isGranel = cartItem?.promotion?.tipo_venta === 'A granel (Kg)';
+    const minQty = isGranel ? 0.5 : 1;
+
     let qty = newQty;
-    if (qty < 1) qty = 1;
+    if (qty < minQty) qty = minQty;
     if (qty > stock) {
       qty = stock;
       toast.warning("Stock máximo alcanzado");
+    }
+
+    // Round to step
+    if (isGranel) {
+      qty = Math.round(qty / 0.5) * 0.5;
+    } else {
+      qty = Math.round(qty);
     }
     
     const newCart = cart.map(item => {
@@ -397,87 +488,11 @@ export default function ReservasPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {promociones.map(promo => (
-                <motion.div
+                <TarjetaProducto
                   key={promo.id}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -4 }}
-                  className="bg-white border border-slate-200/80 hover:border-[#cc0000]/40 rounded-3xl overflow-hidden p-5 flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300"
-                >
-                  <div>
-                    <div className="relative overflow-hidden rounded-2xl mb-4 aspect-[4/3] bg-slate-50 border border-slate-100">
-                      <img
-                        src={promo.imagen_url}
-                        alt={promo.titulo}
-                        className="object-cover w-full h-full hover:scale-105 transition-transform duration-500"
-                      />
-                    </div>
-                    <span className="text-[9px] text-[#cc0000] font-extrabold uppercase tracking-widest bg-[#cc0000]/10 border border-[#cc0000]/15 px-2.5 py-1 rounded-full shadow-sm">
-                      Campaña San Juan
-                    </span>
-                    <h3 className="text-lg font-bold text-slate-950 mt-3 mb-1.5 leading-tight">{promo.titulo}</h3>
-                    <p className="text-slate-500 text-xs leading-relaxed mb-4 font-medium">{promo.descripcion}</p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-baseline pt-3 border-t border-slate-100">
-                      {promo.tipo_venta === 'A granel (Kg)' ? (
-                        <>
-                          <span className="text-xs text-slate-400 font-mono">Precio por Kg:</span>
-                          <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)} / Kg</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-xs text-slate-400 font-mono">Precio Unitario:</span>
-                          <span className="text-xl font-black font-mono text-[#cc0000]">Bs. {promo.precio_bs.toFixed(2)}</span>
-                        </>
-                      )}
-                    </div>
-
-
-
-                    <div className="flex items-center gap-3">
-                      {/* Quantity Selector with strict QA block */}
-                      <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
-                        <button
-                          type="button"
-                          onClick={() => handleDecrement(promo.id)}
-                          className="px-2.5 py-2 hover:bg-slate-100 text-slate-500 transition-colors"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          value={quantities[promo.id] || 1}
-                          onKeyDown={(e) => {
-                            // Bloquear letras, decimales, negativos, etc.
-                            if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
-                              e.preventDefault();
-                            }
-                          }}
-                          onChange={(e) => handleQuantityChange(promo.id, e.target.value, promo.stock_disponible)}
-                          className="w-12 text-center text-sm font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleIncrement(promo.id, promo.stock_disponible)}
-                          className="px-2.5 py-2 hover:bg-slate-100 text-slate-500 transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Add Button */}
-                      <Button
-                        onClick={() => handleAddToCart(promo)}
-                        className="flex-1 bg-[#cc0000] hover:bg-[#e60000] text-white text-xs font-bold uppercase tracking-wider py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-[#cc0000]/10"
-                      >
-                        Añadir a Reserva
-                      </Button>
-                    </div>
-                  </div>
-                </motion.div>
+                  promo={promo}
+                  onAddToCart={handleAddToCart}
+                />
               ))}
             </div>
           )}
@@ -546,61 +561,12 @@ export default function ReservasPage() {
                     </div>
                   ) : (
                     cart.map(item => (
-                      <div key={item.promotion.id} className="flex flex-col gap-2 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                        <div className="flex justify-between items-start gap-4">
-                          <div className="space-y-0.5">
-                            <span className="block font-bold text-slate-900 text-xs leading-snug">{item.promotion.titulo}</span>
-                            <span className="block text-[10px] text-slate-400 font-mono">
-                              Bs. {item.promotion.precio_bs.toFixed(2)} {item.promotion.tipo_venta === 'A granel (Kg)' ? '/ Kg' : 'c/u'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            <span className="font-bold font-mono text-xs text-[#cc0000]">
-                              Bs. {(item.promotion.precio_bs * item.cantidad).toFixed(2)}
-                            </span>
-                            <button
-                              onClick={() => handleRemoveFromCart(item.promotion.id)}
-                              className="text-slate-300 hover:text-red-600 text-xs font-bold transition-colors"
-                              title="Eliminar combo"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* QA Editable Quantity Input inside sidebar cart */}
-                        <div className="flex items-center border border-slate-200 rounded bg-slate-50 w-fit">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad - 1, item.promotion.stock_disponible)}
-                            className="px-2 py-1 hover:bg-slate-100 text-slate-500 transition-colors"
-                          >
-                            <Minus className="w-2.5 h-2.5" />
-                          </button>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.cantidad}
-                            onKeyDown={(e) => {
-                              if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
-                                e.preventDefault();
-                              }
-                            }}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 1;
-                              handleUpdateCartQty(item.promotion.id, val, item.promotion.stock_disponible);
-                            }}
-                            className="w-8 text-center text-[10px] font-bold text-slate-900 border-none bg-transparent focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateCartQty(item.promotion.id, item.cantidad + 1, item.promotion.stock_disponible)}
-                            className="px-2 py-1 hover:bg-slate-100 text-slate-500 transition-colors"
-                          >
-                            <Plus className="w-2.5 h-2.5" />
-                          </button>
-                        </div>
-                      </div>
+                      <CartItemSelector
+                        key={item.promotion.id}
+                        item={item}
+                        onUpdateQty={(qty) => handleUpdateCartQty(item.promotion.id, qty, item.promotion.stock_disponible)}
+                        onRemove={() => handleRemoveFromCart(item.promotion.id)}
+                      />
                     ))
                   )}
                 </div>

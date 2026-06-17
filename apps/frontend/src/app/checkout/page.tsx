@@ -206,9 +206,9 @@ export default function CheckoutStepperPage() {
     return today <= limitDate;
   };
 
-  const subtotalBs = cart.reduce((sum, item) => sum + item.promotion.precio_bs * item.cantidad, 0);
-  const descuentoBs = isAutoDiscountActive() ? subtotalBs * 0.10 : 0;
-  const totalBs = Math.max(0, subtotalBs - descuentoBs);
+  const subtotalBs = Number(cart.reduce((sum, item) => sum + Number((item.promotion.precio_bs * item.cantidad).toFixed(2)), 0).toFixed(2));
+  const descuentoBs = isAutoDiscountActive() ? Number((subtotalBs * 0.10).toFixed(2)) : 0;
+  const totalBs = Number(Math.max(0, subtotalBs - descuentoBs).toFixed(2));
   const cuponAplicado = isAutoDiscountActive() ? 'AUTO_10' : '';
 
   // --- REGLAS DE BOTÓN DESACTIVADO DINÁMICO SEGÚN TIPO DE DOCUMENTO ---
@@ -710,7 +710,7 @@ export default function CheckoutStepperPage() {
                         <div className="space-y-0.5 max-w-[70%]">
                           <span className="block font-bold text-slate-900 leading-tight">{item.promotion.titulo}</span>
                           <span className="block text-[10px] text-slate-400 font-mono">
-                            Cantidad: {item.cantidad} {item.promotion.tipo_venta === 'A granel (Kg)' ? 'Kg' : 'combos'}
+                            Cantidad: {item.cantidad} {item.promotion.tipo_venta === 'A granel (Kg)' ? 'Kg' : 'Unidades'}
                           </span>
                         </div>
                         <span className="font-bold font-mono text-[#cc0000] shrink-0">

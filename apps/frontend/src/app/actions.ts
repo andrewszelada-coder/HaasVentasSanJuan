@@ -404,8 +404,8 @@ export async function crearPedidoAction(
       .eq('id', item.promoId)
       .single();
 
-    const subtotal = Number(promo?.precio_bs || 0) * item.cantidad;
-    subtotalBs += subtotal;
+    const subtotal = Number((Number(promo?.precio_bs || 0) * item.cantidad).toFixed(2));
+    subtotalBs = Number((subtotalBs + subtotal).toFixed(2));
     itemsConSubtotal.push({
       promo_id: item.promoId,
       cantidad: item.cantidad,
@@ -417,11 +417,11 @@ export async function crearPedidoAction(
   const today = new Date();
   const limitDate = new Date('2026-06-17T23:59:59');
   if (today <= limitDate) {
-    serverDescuentoBs = subtotalBs * 0.10;
+    serverDescuentoBs = Number((subtotalBs * 0.10).toFixed(2));
   }
 
   const finalDescuentoBs = serverDescuentoBs;
-  const totalBs = Math.max(0, subtotalBs - finalDescuentoBs);
+  const totalBs = Number(Math.max(0, subtotalBs - finalDescuentoBs).toFixed(2));
 
   const { data: pedido, error: pedidoErr } = await supabase
     .from('pedidos')
