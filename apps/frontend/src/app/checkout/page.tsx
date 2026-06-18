@@ -202,7 +202,7 @@ export default function CheckoutStepperPage() {
 
   const isAutoDiscountActive = () => {
     const today = new Date();
-    const limitDate = new Date('2026-06-17T23:59:59');
+    const limitDate = new Date('2026-06-18T23:59:59');
     return today <= limitDate;
   };
 

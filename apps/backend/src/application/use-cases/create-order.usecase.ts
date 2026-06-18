@@ -24,6 +24,17 @@ export class CreateOrderUseCase {
         throw new Error(`La promoción ${item.promotionId} no está disponible.`);
       }
 
+      // Validación de tipo de venta y formato de cantidad
+      if (promo.tipo_venta === 'A granel (Kg)') {
+        if (typeof item.quantity !== 'number' || isNaN(item.quantity) || item.quantity <= 0) {
+          throw new Error(`La cantidad para "${promo.titulo}" debe ser un número decimal positivo.`);
+        }
+      } else {
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throw new Error(`La cantidad para "${promo.titulo}" debe ser un número entero positivo.`);
+        }
+      }
+
       // Validación de stock (Condición Crítica QA)
       if (item.quantity > promo.stock_disponible) {
         throw new Error(`Stock insuficiente para "${promo.titulo}". Solicitado: ${item.quantity}, Disponible: ${promo.stock_disponible}`);

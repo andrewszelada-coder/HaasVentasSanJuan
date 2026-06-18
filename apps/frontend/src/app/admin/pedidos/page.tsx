@@ -30,6 +30,7 @@ interface PedidoItem {
   promociones_sanjuan?: {
     titulo: string;
     precio_bs: number;
+    tipo_venta?: string;
   };
 }
 
@@ -384,9 +385,12 @@ Puede recoger su pedido entre el 19 y 20 de junio. Quedamos atentos. ¡Muchas gr
   filteredPedidos.forEach(p => {
     if (p.estado !== 'cancelado' && p.pedido_items) {
       p.pedido_items.forEach(item => {
-        const title = (item.promociones_sanjuan?.titulo || '').toLowerCase();
-        if (title.includes('granel') || title.includes('kg') || title.includes('kilo')) {
-          granelKg += item.cantidad * 5; // Asignación proporcional ficticia en Kg
+        const promo = item.promociones_sanjuan;
+        const isGranel = promo?.tipo_venta === 'A granel (Kg)' || 
+                         (promo?.titulo || '').toLowerCase().includes('granel') || 
+                         (promo?.titulo || '').toLowerCase().includes('kg');
+        if (isGranel) {
+          granelKg += item.cantidad; // Sumar cantidad decimal directamente sin multiplicadores
         } else {
           paquetesUnid += item.cantidad;
         }

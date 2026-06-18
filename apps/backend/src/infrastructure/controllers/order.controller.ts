@@ -21,7 +21,10 @@ export class OrderController {
         branchId: createOrderDto.branchId,
         deliveryDate: new Date(createOrderDto.deliveryDate),
         observations: createOrderDto.observations,
-        items: createOrderDto.items,
+        items: createOrderDto.items.map(item => ({
+          promotionId: item.promotionId,
+          quantity: typeof item.quantity === 'string' ? parseFloat(item.quantity) : Number(item.quantity),
+        })),
       });
 
       return {

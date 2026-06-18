@@ -9,6 +9,7 @@ export interface OrderRepositoryPort {
     precio_bs: number;
     stock_disponible: number;
     activo: boolean;
+    tipo_venta?: string;
     products: { weight: number }[];
   } | null>;
   updateStock(promotionId: string, quantity: number): Promise<void>;

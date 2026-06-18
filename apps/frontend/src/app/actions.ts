@@ -265,7 +265,8 @@ export async function getPedidos(soloHoy = false, desde?: string, hasta?: string
         subtotal_bs,
         promociones_sanjuan (
           titulo,
-          precio_bs
+          precio_bs,
+          tipo_venta
         )
       )
     `);
@@ -339,7 +340,10 @@ export async function crearPedidoAction(
   const cleanedSucursalDestino = clean(sucursalDestino);
   const cleanedFechaRequerida = clean(fechaRequerida);
   const cleanedObservaciones = clean(observaciones);
-  const cleanedItems = clean(items);
+  const cleanedItems = clean(items).map((item: any) => ({
+    promoId: item.promoId,
+    cantidad: typeof item.cantidad === 'string' ? parseFloat(item.cantidad) : Number(item.cantidad)
+  }));
   const cleanedBilling = clean(billingData);
   const cleanedLogistica = clean(logisticaData);
   const cleanedFinanciero = clean(financieroData);
@@ -375,7 +379,7 @@ export async function crearPedidoAction(
   for (const item of cleanedItems) {
     const { data: promo, error: promoErr } = await supabase
       .from('promociones_sanjuan')
-      .select('titulo, stock_disponible, activo')
+      .select('titulo, stock_disponible, activo, tipo_venta')
       .eq('id', item.promoId)
       .single();
 
@@ -385,6 +389,17 @@ export async function crearPedidoAction(
 
     if (!promo.activo) {
       return { error: `La promoción "${promo.titulo}" ya no se encuentra activa.` };
+    }
+
+    // Validación según tipo de venta (a granel vs unitario)
+    if (promo.tipo_venta === 'A granel (Kg)') {
+      if (typeof item.cantidad !== 'number' || isNaN(item.cantidad) || item.cantidad <= 0) {
+        return { error: `La cantidad para "${promo.titulo}" debe ser un número decimal positivo.` };
+      }
+    } else {
+      if (!Number.isInteger(item.cantidad) || item.cantidad <= 0) {
+        return { error: `La cantidad para "${promo.titulo}" debe ser un número entero positivo.` };
+      }
     }
 
     if (item.cantidad > promo.stock_disponible) {
@@ -415,7 +430,7 @@ export async function crearPedidoAction(
 
   let serverDescuentoBs = 0;
   const today = new Date();
-  const limitDate = new Date('2026-06-17T23:59:59');
+  const limitDate = new Date('2026-06-18T23:59:59');
   if (today <= limitDate) {
     serverDescuentoBs = Number((subtotalBs * 0.10).toFixed(2));
   }
